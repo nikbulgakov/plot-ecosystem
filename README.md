@@ -19,6 +19,14 @@ python -m http.server 8765
 
 Then open http://localhost:8765 and click to enter (audio needs a user gesture).
 
+## The plot remembers
+
+- Every creature is an individual with a name, an age and a lifespan. Young ones are small, old ones slow.
+- The roster, the flowers, the stats and the last 40 log lines live in the browser's localStorage and are saved every half minute and when you leave.
+- When you come back, the days you missed are replayed against the real weather history of your place (Open-Meteo, up to 92 days): frost and storms take the fragile, rain brings slugs and toads, warm months bring births, and empty niches are refilled by wanderers from beyond the plot.
+- A pinned "while you were away" block at the top of the log tells you what happened, day by day.
+- Add `?reset=1` to the URL to start a fresh plot.
+
 ## What's inside
 
 - `index.html` — layout and UI panels (ecosystem stats, how it works, events log, ticker player, recorder)
@@ -26,7 +34,8 @@ Then open http://localhost:8765 and click to enter (audio needs a user gesture).
 - `js/weather.js` — Open-Meteo client: geocoding, geolocation fallback, WMO code mapping, refresh
 - `js/sim.js` — clock and weather (live from the sky, or simulated), and agents (nuthatch, badger, toad, voles, beetles, moths, wren, slug) with their own rules
 - `js/audio.js` — Web Audio: pads that follow the weather, pentatonic plucks on events, rain/stream/wind beds and one-shot foley, recording to webm
-- `js/main.js` — glue, log, ticker, recorder UI
+- `js/life.js` — persistence and demography: roster with names and ages, births, deaths, arrivals, flowers, day steps and the catch-up after an absence
+- `js/main.js` — glue, log, ticker, recorder UI, the "while you were away" block
 
 ## Controls
 

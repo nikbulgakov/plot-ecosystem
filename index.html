@@ -59,6 +59,11 @@
   .how p{margin:0 0 9px;font-size:9px;line-height:13px;text-transform:uppercase;
     font-family:"Silkscreen","VT323",monospace;color:#b9cf98}
 
+  #away{border:1px solid rgba(255,208,122,.35);background:rgba(255,208,122,.07);border-radius:4px;padding:8px 8px 4px;margin-bottom:8px}
+  .away-h{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font:9px/12px "Silkscreen","VT323",monospace;color:#ffd07a;text-transform:uppercase;margin-bottom:6px}
+  #away-x{background:none;border:0;color:#ffd07a;cursor:pointer;font-size:12px;line-height:1;padding:0;flex:none}
+  #away-list{max-height:150px;overflow-y:auto;scrollbar-width:thin}
+  #away-list .ev .t{color:#b58b4a}
   #log{height:300px;overflow-y:auto;padding-right:6px;scrollbar-width:thin;scrollbar-color:rgba(201,229,154,.35) transparent}
   #log::-webkit-scrollbar{width:4px}
   #log::-webkit-scrollbar-thumb{background:rgba(201,229,154,.35)}
@@ -154,6 +159,8 @@
       <div class="row"><span class="k">weather</span><span class="v" id="ui-weather">after rain</span></div>
       <div class="row"><span class="k">temperature</span><span class="v" id="ui-temp">12°C</span></div>
       <div class="row"><span class="k">wind</span><span class="v" id="ui-wind">—</span></div>
+      <div class="row"><span class="k">plot age</span><span class="v" id="ui-age">day 1</span></div>
+      <div class="row"><span class="k">population</span><span class="v" id="ui-pop">—</span></div>
       <div class="row"><span class="k">activity</span><span class="meter"><span class="bar"><i id="ui-act"></i></span><span class="n" id="ui-act-n">0%</span></span></div>
       <div class="row"><span class="k">tension</span><span class="meter"><span class="bar red"><i id="ui-ten"></i></span><span class="n" id="ui-ten-n">0.00</span></span></div>
       <div class="sep"></div>
@@ -169,6 +176,7 @@
       <p>Each agent represents a creature or an object in the world, with its own rules and rhythms.</p>
       <p>What you hear and can follow in the log is the result of their interactions and actions translated in real time into a generated sound.</p>
       <p>The sky is real: time, weather, temperature and wind come from the place you are in (or one you pick), so no two plots are alike.</p>
+      <p>The plot keeps living while you are away. Creatures have names, grow old, are born and die, and new ones wander in. Come back after a few days and read what happened.</p>
       <p style="color:var(--ink-dim)">Drag to orbit · wheel to zoom · click a creature to follow it · click the place to move the plot.</p>
     </div>
   </div>
@@ -177,7 +185,13 @@
 <div class="ui" id="right">
   <div class="panel" id="p-log">
     <h2>events log<span class="chev">⌄</span></h2>
-    <div class="body"><div id="log"></div></div>
+    <div class="body">
+      <div id="away" hidden>
+        <div class="away-h"><span id="away-title">while you were away</span><button id="away-x" title="dismiss">×</button></div>
+        <div id="away-list"></div>
+      </div>
+      <div id="log"></div>
+    </div>
   </div>
 </div>
 
@@ -195,6 +209,7 @@
 <script src="js/weather.js"></script>
 <script src="js/world.js"></script>
 <script src="js/sim.js"></script>
+<script src="js/life.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

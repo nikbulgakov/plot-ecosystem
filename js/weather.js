@@ -113,6 +113,23 @@
     schedule();
     return p;
   };
+  // what the sky did over the last N days at the current place: per-date summaries
+  Wx.history = async function (days) {
+    const p = place || DEFAULT;
+    const n = Math.max(1, Math.min(92, Math.ceil(days)));
+    const j = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=temperature_2m,precipitation,weather_code&past_days=${n}&forecast_days=1&timezone=auto`);
+    const out = {}, H = j.hourly;
+    for (let i = 0; i < H.time.length; i++) {
+      const t = H.temperature_2m[i]; if (t == null) continue;
+      const date = H.time[i].slice(0, 10), code = H.weather_code[i] || 0, pr = H.precipitation[i] || 0;
+      const d = out[date] || (out[date] = { rainHours: 0, snowHours: 0, stormHours: 0, minTemp: t, maxTemp: t });
+      const snow = (code >= 71 && code <= 77) || code === 85 || code === 86;
+      if (snow) d.snowHours++; else if (pr > 0.1) d.rainHours++;
+      if (code >= 95) d.stormHours++;
+      d.minTemp = Math.min(d.minTemp, t); d.maxTemp = Math.max(d.maxTemp, t);
+    }
+    return { days: out, utcOffset: j.utc_offset_seconds };
+  };
   Wx.place = () => place;
   Wx.last = () => lastData;
   Wx.describe = function (d) {

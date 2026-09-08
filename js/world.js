@@ -134,7 +134,17 @@
     const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(stems, 3));
     const stemLines = new THREE.LineSegments(sg, new THREE.LineBasicMaterial({ color: 0xd8cfa8, transparent: true, opacity: 0.55 }));
     const g = new THREE.Group(); g.add(heads); g.add(stemLines);
+    flowers = { heads, stems: stemLines, max: count };
     return g;
+  }
+  let flowers = null, flowerTarget = 1, flowerNow = 1;
+  // how much of the plot is in flower, 0..1 (instances beyond the count are simply not drawn)
+  W.setFlowerDensity = function (d, immediate) { flowerTarget = Math.max(0.04, Math.min(1, d)); if (immediate) flowerNow = flowerTarget; };
+  function applyFlowers(dt) {
+    if (!flowers) return;
+    flowerNow += (flowerTarget - flowerNow) * Math.min(1, dt * 0.8);
+    const n = Math.floor(flowers.max * flowerNow);
+    if (flowers.heads.count !== n) { flowers.heads.count = n; flowers.stems.geometry.setDrawRange(0, n * 2); }
   }
 
   /* ---------- rain ---------- */
@@ -188,7 +198,8 @@
     dot.renderOrder = 11;
     const hit = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 6), new THREE.MeshBasicMaterial({ visible: false }));
     g.add(ol.group); g.add(dot); g.add(hit);
-    g.scale.setScalar((spec.size || 1) * 1.7);
+    const base = (spec.size || 1) * 1.7;
+    g.scale.setScalar(base);
     scene.add(g);
     const edges = { material: ol.mat };
     // trail
@@ -199,14 +210,22 @@
     const trail = new THREE.Points(tg, new THREE.PointsMaterial({ color: spec.trail || 0xff2a3c, size: 0.14, sizeAttenuation: true, depthTest: false, transparent: true, opacity: 0.9, toneMapped: false }));
     trail.frustumCulled = false; trail.renderOrder = 9;
     scene.add(trail);
-    const c = { spec, group: g, edges, dot, hit, trail, tp, tn: 0, tN: N, lastTrail: new THREE.Vector3(1e9, 0, 0), spin: rnd(0.2, 0.8), bob: Math.random() * 6 };
+    const c = { spec, group: g, edges, dot, hit, trail, tp, tn: 0, tN: N, base, lastTrail: new THREE.Vector3(1e9, 0, 0), spin: rnd(0.2, 0.8), bob: Math.random() * 6 };
     hit.userData.creature = c;
     creatures.push(c);
     return c;
   };
-  W.updateCreature = function (c, x, y, z, state) {
+  W.removeCreature = function (c) {
+    const i = creatures.indexOf(c); if (i >= 0) creatures.splice(i, 1);
+    scene.remove(c.group); scene.remove(c.trail);
+    c.trail.geometry.dispose();
+    c.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    if (cam.follow === c) cam.follow = null;
+  };
+  W.updateCreature = function (c, x, y, z, state, scale) {
     const g = c.group;
     g.position.set(x, y, z);
+    if (scale != null) g.scale.setScalar(c.base * scale);
     if (c.lastTrail.distanceTo(g.position) > 0.22) {
       c.lastTrail.copy(g.position);
       const i = c.tn % c.tN;
@@ -312,6 +331,7 @@
     const dt = Math.min(0.05, clock.getDelta());
     const t = clock.elapsedTime;
     grassMat.uniforms.uTime.value = t;
+    applyFlowers(dt);
     // rain
     if (rainCount > 0) {
       const fall = (snowMode ? 1.6 : 9) * dt, drift = snowMode ? Math.sin(t * 0.7) * 0.5 * dt : dt * 0.6;

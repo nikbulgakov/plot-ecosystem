@@ -43,9 +43,21 @@
       state: 'rest', t: rnd(1, 4), target: null, speed: 0.6, vel: 0, mood: 0, lastAct: '', cooldown: {},
     }, def);
     a.mesh = W.addCreature({ shape: def.shape, color: def.color, dot: def.dot, size: def.size, trail: def.trail });
+    a.meta = def.meta || {};
     agents.push(a);
     return a;
   }
+  // life record → live agent (meta carries name, age, lifespan and the last known position)
+  S.spawn = function (species, meta) {
+    const d = SPECIES[species]; if (!d) return null;
+    const def = Object.assign({ species }, d, { home: Object.assign({}, d.home), t: rnd(0.5, 5), meta });
+    if (meta && meta.x != null && meta.z != null) def.pos = { x: meta.x, z: meta.z };
+    return makeAgent(def);
+  };
+  S.remove = function (a) {
+    const i = agents.indexOf(a); if (i >= 0) agents.splice(i, 1);
+    W.removeCreature(a.mesh);
+  };
   function moveTo(a, dt, tgt, speed) {
     const dx = tgt.x - a.pos.x, dz = tgt.z - a.pos.z, d = Math.hypot(dx, dz);
     if (d < 0.08) { a.vel = 0; return true; }
@@ -153,8 +165,12 @@
   function tickAgent(a, dt) {
     a.t -= dt;
     a.vel = 0;
+    // young ones are small, old ones slow
+    const life = a.meta.lifespan || 100, age = a.meta.ageDays || 0;
+    const grow = clamp(0.5 + 0.5 * age / (life * 0.12), 0.5, 1);
+    const old = age > life * 0.85 ? 0.6 : 1;
     if (a.state === 'wander' && a.target) {
-      const done = moveTo(a, dt, a.target, a.speed * (st.weather === 'rain' && a.y < 0.4 ? 0.7 : 1));
+      const done = moveTo(a, dt, a.target, a.speed * old * (st.weather === 'rain' && a.y < 0.4 ? 0.7 : 1));
       if (done) { a.state = 'rest'; a.t = rnd(0.5, 2); }
     } else if (a.state === 'flee') {
       const th = a.threat;
@@ -165,7 +181,7 @@
     } else if (a.t <= 0) think(a);
     // grounded creatures sit at their height, fliers bob
     const yy = a.y + (a.species === 'moth' ? Math.sin(st.minutes * 7 + a.pos.x) * 0.08 : 0);
-    W.updateCreature(a.mesh, a.pos.x, yy, a.pos.z, a.state);
+    W.updateCreature(a.mesh, a.pos.x, yy, a.pos.z, a.state, grow);
   }
 
   /* ---------- interactions ---------- */
@@ -253,11 +269,7 @@
   /* ---------- public ---------- */
   S.init = function (world, audio, onEvent) {
     W = world; A = audio; emit = onEvent;
-    for (const name in SPECIES) {
-      const d = SPECIES[name];
-      const n = name === 'beetle' ? 2 : name === 'vole' ? 2 : name === 'moth' ? 2 : 1;
-      for (let i = 0; i < n; i++) makeAgent(Object.assign({ species: name }, d, { home: Object.assign({}, d.home), t: rnd(0.5, 5) }));
-    }
+    // creatures are spawned by Life from the persisted roster
     setWeather('after rain', true);
   };
 

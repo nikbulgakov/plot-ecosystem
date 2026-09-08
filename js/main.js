@@ -7,14 +7,19 @@
   const bars = document.querySelectorAll('#player .bars i');
   let running = false, recStart = 0, recTimer = null;
 
-  function addEvent(ev) {
-    const t = Sim.clockText();
+  function renderEvent(t, text, kind) {
     const el = document.createElement('div');
-    el.className = 'ev' + (ev.kind === 'hot' ? ' hot' : ev.kind === 'alarm' ? ' alarm' : '');
-    el.innerHTML = `<span class="t">${t}</span><span class="m"></span>`;
-    el.querySelector('.m').textContent = ev.text;
+    el.className = 'ev' + (kind === 'hot' ? ' hot' : kind === 'alarm' ? ' alarm' : '');
+    el.innerHTML = `<span class="t"></span><span class="m"></span>`;
+    el.querySelector('.t').textContent = t;
+    el.querySelector('.m').textContent = text;
     log.prepend(el);
     while (log.children.length > 80) log.lastChild.remove();
+  }
+  function addEvent(ev) {
+    const t = ev.t != null ? ev.t : Sim.clockText();
+    renderEvent(t, ev.text, ev.kind);
+    if (window.Life && Life.state()) Life.pushLog({ t, text: ev.text, kind: ev.kind || 'normal' });
     const line = ev.text.toUpperCase() + '  ·  ' + t + '  ·  ';
     ticker.textContent = line + line; // doubled so the -50% scroll loops seamlessly
     ticker.style.animationDuration = Math.max(8, line.length * 0.22) + 's';
@@ -26,6 +31,11 @@
     $('ui-weather').textContent = s.weather;
     $('ui-temp').textContent = Math.round(s.temp) + '°C';
     $('ui-wind').textContent = s.live && Weather.last() ? Math.round(Weather.last().windKmh) + ' km/h' : Math.round(s.wind * 40) + ' km/h';
+    if (Life.state()) {
+      const p = Life.population();
+      $('ui-age').textContent = 'day ' + (Math.floor(Life.age()) + 1);
+      $('ui-pop').textContent = p.count + ' · ' + p.species + ' species';
+    }
     const act = Math.round(s.activity * 100);
     $('ui-act').style.width = act + '%'; $('ui-act-n').textContent = act + '%';
     $('ui-ten').style.width = Math.round(s.tension * 100) + '%'; $('ui-ten-n').textContent = s.tension.toFixed(2);
@@ -59,6 +69,7 @@
   function loop() {
     const dt = World.update();
     Sim.tick(dt);
+    Life.tick(dt, Sim.state);
     const s = Sim.state;
     World.setAtmosphere({ hour: s.hour, mood: s.mood, rainAmount: s.rainAmount, wind: s.wind, day: Sim.daylight(), dusk: Sim.twilight(), snow: s.weather === 'snow' });
     updatePanel();
@@ -75,12 +86,68 @@
     AudioEngine.setWorldVolume($('vol-world').value / 100);
     World.init($('scene'));
     Sim.init(World, AudioEngine, addEvent);
-    World.onFollow = c => { if (c) addEvent({ text: 'camera follows the ' + Sim.agents.find(a => a.mesh === c).species, kind: 'normal' }); };
-    addEvent({ text: 'the plot wakes up. after rain, ' + Math.round(Sim.state.temp) + '°C', kind: 'hot' });
+    Life.init({ sim: Sim, world: World, emit: addEvent });
+    World.onFollow = c => { if (c) { const a = Sim.agents.find(x => x.mesh === c); addEvent({ text: 'camera follows ' + (a.meta.name ? a.meta.name + ' the ' : 'the ') + a.species, kind: 'normal' }); } };
+    if (new URLSearchParams(location.search).get('reset') === '1') Life.reset();
+    const saved = Life.load();
+    if (saved) {
+      for (const e of saved.log) renderEvent(e.t, e.text, e.kind);
+      Life.spawnAll();
+      World.setFlowerDensity(saved.flowers, true);
+      addEvent({ text: `the plot wakes up. day ${Math.floor(Life.age()) + 1}, ${Life.population().count} creatures`, kind: 'hot' });
+    } else {
+      Life.seed(); Life.spawnAll(); World.setFlowerDensity(0.8, true);
+      addEvent({ text: 'a new plot. no one has walked here before', kind: 'hot' });
+    }
     loop();
     connectSky();
+    document.addEventListener('visibilitychange', () => { if (document.hidden) Life.save(); });
+    window.addEventListener('pagehide', () => Life.save());
   }
   gate.addEventListener('click', start);
+
+  /* ----- what happened while you were away ----- */
+  let caughtUp = false;
+  async function catchUp() {
+    if (caughtUp) return; caughtUp = true;
+    const s = Life.state();
+    const gapDays = (Date.now() - s.lastSeen) / 86400000;
+    let history = null, off = 0;
+    if (gapDays > 0.2) { try { const h = await Weather.history(Math.min(92, Math.ceil(gapDays) + 1)); history = h.days; off = h.utcOffset; } catch (e) {} }
+    const r = Life.catchUp({ history, utcOffset: off });
+    Life.spawnAll();
+    World.setFlowerDensity(s.flowers);
+    if (r.steps > 0 || r.events.length) {
+      const shown = r.events.slice(-14);
+      if (r.events.length > shown.length) addEvent({ text: `…and ${r.events.length - shown.length} smaller things before that`, kind: 'normal', t: '' });
+      for (const e of shown) addEvent({ text: e.text, kind: e.kind, t: 'd+' + e.day });
+      const d = r.daysAway, bits = [d >= 1 ? `${Math.round(d)} day${Math.round(d) === 1 ? '' : 's'}` : `${Math.max(1, Math.round(d * 24))} hours`];
+      if (r.rainHours > 0.5) bits.push(`${Math.round(r.rainHours)}h of rain`);
+      if (r.coldest != null) bits.push(`coldest ${Math.round(r.coldest)}°C`);
+      if (r.snowDays) bits.push(`${r.snowDays} snow day${r.snowDays > 1 ? 's' : ''}`);
+      if (r.births) bits.push(`${r.births} born`);
+      if (r.deaths) bits.push(`${r.deaths} died`);
+      if (r.arrivals) bits.push(`${r.arrivals} arrived`);
+      addEvent({ text: 'while you were away: ' + bits.join(', '), kind: 'hot', t: 'away' });
+      showAway(bits.join(', '), shown.length ? shown : [{ day: r.steps, text: 'nothing worth telling. the plot endured', kind: 'normal' }]);
+    } else if (gapDays * 1440 >= 10) addEvent({ text: 'welcome back. the plot barely noticed', kind: 'normal' });
+    Life.save();
+  }
+  // pinned block at the top of the log so the news isn't buried by the day's chatter
+  function showAway(summary, events) {
+    const box = $('away'), list = $('away-list');
+    $('away-title').textContent = 'while you were away · ' + summary;
+    list.innerHTML = '';
+    for (const e of events) {
+      const el = document.createElement('div');
+      el.className = 'ev' + (e.kind === 'hot' ? ' hot' : e.kind === 'alarm' ? ' alarm' : '');
+      el.innerHTML = '<span class="t"></span><span class="m"></span>';
+      el.querySelector('.t').textContent = 'd+' + e.day; el.querySelector('.m').textContent = e.text;
+      list.appendChild(el);
+    }
+    box.hidden = false;
+  }
+  $('away-x').addEventListener('click', () => { $('away').hidden = true; });
 
   /* ----- real sky ----- */
   function setPlaceLabel(name, live) {
@@ -91,10 +158,10 @@
   function connectSky() {
     setPlaceLabel('looking up…', false);
     Weather.start({
-      onPlace: p => setPlaceLabel(p.name, false),
+      onPlace: p => { setPlaceLabel(p.name, false); catchUp(); },
       onData: d => { Sim.applyLive(d); setPlaceLabel(d.place.name, true); },
       onError: (e, stage) => {
-        if (stage === 'weather') { addEvent({ text: 'no sky data. the plot dreams its own weather', kind: 'alarm' }); setPlaceLabel('simulated', false); }
+        if (stage === 'weather') { addEvent({ text: 'no sky data. the plot dreams its own weather', kind: 'alarm' }); setPlaceLabel('simulated', false); catchUp(); }
         else if (stage === 'geocode') addEvent({ text: 'that place is not on any map here', kind: 'alarm' });
       },
     });
