@@ -316,15 +316,27 @@
   }
   // species → shape, wire colour, core colour and size, spin speed
   const SHAPES3D = {
-    badger:   { shape: () => new THREE.BoxGeometry(1.4, 1.4, 1.4), color: 0xff2d6e, core: 0xff6a2a, coreR: 0.2, spin: 0.35 },
-    nuthatch: { shape: () => new THREE.BoxGeometry(0.9, 0.9, 0.9), color: 0x27e8c8, core: 0xff3b3b, coreR: 0.12, spin: 0.5 },
-    toad:     { ring: 0.62, color: 0xffd23f, core: 0xff5a2a, coreR: 0.15, spin: 0.25 },
-    vole:     { shape: () => new THREE.OctahedronGeometry(0.66), color: 0xf4f4f0, core: 0xff3b3b, coreR: 0.11, spin: 0.9 },
-    beetle:   { shape: () => new THREE.TetrahedronGeometry(0.56), color: 0xf4f4f0, core: 0xff8a2a, coreR: 0.09, spin: 0.6 },
-    moth:     { shape: () => new THREE.ConeGeometry(0.48, 0.92, 3), color: 0x27e8c8, core: 0xff3b3b, coreR: 0.11, spin: 0.7, hover: true },
-    wren:     { shape: () => new THREE.ConeGeometry(0.52, 0.88, 4), color: 0x27e8c8, core: 0xffffff, coreR: 0.11, spin: 0.6 },
-    slug:     { ring: 0.42, color: 0xd9c9b5, core: 0xff8a2a, coreR: 0.09, spin: 0.15 },
+    badger:   { shape: () => new THREE.BoxGeometry(1.4, 1.4, 1.4), color: 0xff2d6e, core: 0xff6a2a, coreR: 0.2, spin: 0.35, halo: 3.2 },
+    nuthatch: { shape: () => new THREE.BoxGeometry(0.9, 0.9, 0.9), color: 0x27e8c8, core: 0xff3b3b, coreR: 0.12, spin: 0.5, halo: 2.2 },
+    toad:     { ring: 0.62, color: 0xffd23f, core: 0xff5a2a, coreR: 0.15, spin: 0.25, halo: 1.9 },
+    vole:     { shape: () => new THREE.OctahedronGeometry(0.66), color: 0xffffff, core: 0xff3b3b, coreR: 0.11, spin: 0.9, halo: 1.9 },
+    beetle:   { shape: () => new THREE.TetrahedronGeometry(0.56), color: 0xffffff, core: 0xff8a2a, coreR: 0.09, spin: 0.6, halo: 1.5 },
+    moth:     { shape: () => new THREE.ConeGeometry(0.48, 0.92, 3), color: 0x27e8c8, core: 0xff3b3b, coreR: 0.11, spin: 0.7, hover: true, halo: 2.0 },
+    wren:     { shape: () => new THREE.ConeGeometry(0.52, 0.88, 4), color: 0x27e8c8, core: 0xffffff, coreR: 0.11, spin: 0.6, halo: 2.0 },
+    slug:     { ring: 0.42, color: 0xd9c9b5, core: 0xff8a2a, coreR: 0.09, spin: 0.15, halo: 1.3 },
   };
+  // a soft radial glow, drawn once and tinted per creature
+  let haloTex = null;
+  function getHaloTex() {
+    if (haloTex) return haloTex;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const g = cv.getContext('2d'), grad = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,0.9)'); grad.addColorStop(0.35, 'rgba(255,255,255,0.35)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+    haloTex = new THREE.CanvasTexture(cv);
+    return haloTex;
+  }
+  const TRAIL_N = 64, TRAIL_LIFE = 6;
   W.addCreature = function (spec) {
     const def = SHAPES3D[spec.sprite] || SHAPES3D.beetle;
     const g = new THREE.Group();
@@ -334,22 +346,53 @@
     const coreMat = new THREE.MeshBasicMaterial({ color: def.core, toneMapped: false, transparent: true, opacity: 1 });
     const core = new THREE.Mesh(new THREE.SphereGeometry(def.coreR, 8, 6), coreMat);
     g.add(core);
+    // halo: an additive glow in the wire colour that breathes
+    const haloMat = new THREE.SpriteMaterial({ map: getHaloTex(), color: def.color, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+    const halo = new THREE.Sprite(haloMat); halo.scale.setScalar(def.halo); g.add(halo);
     const hit = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 6), new THREE.MeshBasicMaterial({ visible: false }));
     g.add(hit);
     g.scale.setScalar(spec.size || 1);
     scene.add(g);
-    const c = { spec, group: g, wire: w.group, wireMat: w.mat, core, coreMat, coreColor: new THREE.Color(def.core), hit, def, size: spec.size || 1, restT: 0, bob: Math.random() * 6, tilt: Math.random() * 6 };
+    // tracer: a ring of dots that fade out over a few seconds
+    const tp = new Float32Array(TRAIL_N * 3), tcol = new Float32Array(TRAIL_N * 3), tborn = new Float32Array(TRAIL_N).fill(-1e9);
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.BufferAttribute(tp, 3)); tg.setAttribute('color', new THREE.BufferAttribute(tcol, 3));
+    const trail = new THREE.Points(tg, new THREE.PointsMaterial({ size: 4, sizeAttenuation: false, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    trail.frustumCulled = false; scene.add(trail);
+    const c = { spec, group: g, wire: w.group, wireMat: w.mat, core, coreMat, coreColor: new THREE.Color(def.core), halo, haloMat, hit, def, size: spec.size || 1, restT: 0, bob: Math.random() * 6, tilt: Math.random() * 6,
+      trail, tp, tcol, tborn, tn: 0, trailColor: new THREE.Color(def.core), lastTrail: new THREE.Vector3(1e9, 0, 0) };
     hit.userData.creature = c;
     creatures.push(c);
     return c;
   };
   W.removeCreature = function (c) {
     const i = creatures.indexOf(c); if (i >= 0) creatures.splice(i, 1);
-    scene.remove(c.group);
+    scene.remove(c.group); scene.remove(c.trail);
     c.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
-    c.wireMat.dispose(); c.coreMat.dispose();
+    c.trail.geometry.dispose(); c.trail.material.dispose();
+    c.wireMat.dispose(); c.coreMat.dispose(); c.haloMat.dispose();
     if (cam.follow === c) cam.follow = null;
   };
+  function updateTrail(c, t, moving) {
+    const g = c.group;
+    if (moving && c.lastTrail.distanceTo(g.position) > 0.22) {
+      c.lastTrail.copy(g.position);
+      const i = c.tn % TRAIL_N;
+      c.tp.set([g.position.x, Math.max(0.35, g.position.y - 0.35), g.position.z], i * 3);
+      c.tborn[i] = t; c.tn++;
+      c.trail.geometry.attributes.position.needsUpdate = true;
+    }
+    const col = c.tcol, tc = c.trailColor;
+    let alive = false;
+    for (let i = 0; i < TRAIL_N; i++) {
+      const k = Math.max(0, 1 - (t - c.tborn[i]) / TRAIL_LIFE);
+      const f = k * k;
+      if (f > 0) alive = true;
+      col[i * 3] = tc.r * f; col[i * 3 + 1] = tc.g * f; col[i * 3 + 2] = tc.b * f;
+    }
+    c.trail.geometry.attributes.color.needsUpdate = true;
+    c.trail.visible = alive;
+  }
   const flashCol = new THREE.Color(0xffffff);
   W.updateCreature = function (c, x, y, z, state, scale) {
     const g = c.group, t = clock.elapsedTime, d = c.def;
@@ -369,8 +412,13 @@
     c.core.scale.setScalar(pulse * (asleep ? 0.7 : 1));
     if (state === 'alert' || state === 'flee') c.coreMat.color.copy(c.coreColor).lerp(flashCol, 0.5 + 0.5 * Math.sin(t * 12));
     else c.coreMat.color.copy(c.coreColor);
-    c.wireMat.opacity = asleep ? 0.5 : 1;
+    // breathing: the wire and the halo swell and fade together, faster when the creature is stirred
+    const breath = 0.5 + 0.5 * Math.sin(t * (state === 'flee' || state === 'alert' ? 6 : 2.1) + c.bob);
+    c.wireMat.opacity = asleep ? 0.45 : 0.82 + 0.18 * breath;
     c.coreMat.opacity = asleep ? 0.75 : 1;
+    c.haloMat.opacity = asleep ? 0.08 : 0.16 + 0.26 * breath;
+    c.halo.scale.setScalar(d.halo * (0.9 + 0.2 * breath));
+    updateTrail(c, t, moving);
   };
 
   /* ---------- post: low-res + palette + dither + bloom ---------- */
