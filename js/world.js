@@ -366,15 +366,7 @@
     const hit = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 6), new THREE.MeshBasicMaterial({ visible: false }));
     g.add(sprite); g.add(hit);
     scene.add(g);
-    // trail: red pixel dots
-    const N = 140;
-    const tp = new Float32Array(N * 3);
-    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(tp, 3));
-    tg.setDrawRange(0, 0);
-    const trail = new THREE.Points(tg, new THREE.PointsMaterial({ color: spec.trail || 0xff4a3c, size: 0.2, sizeAttenuation: true, depthTest: false, transparent: true, opacity: 0.9, toneMapped: false }));
-    trail.frustumCulled = false; trail.renderOrder = 9;
-    scene.add(trail);
-    const c = { spec, group: g, sprite, mat, tex, hit, trail, tp, tn: 0, tN: N, baseScale: sprite.scale.clone(), lastTrail: new THREE.Vector3(1e9, 0, 0), facing: 1, flipped: false, frame: -1, frames: st.n, restT: 0, bob: Math.random() * 6 };
+    const c = { spec, group: g, sprite, mat, tex, hit, baseScale: sprite.scale.clone(), facing: 1, flipped: false, frame: -1, frames: st.n, restT: 0, bob: Math.random() * 6 };
     setFrame(c, FRAME_WALK_A, false);
     hit.userData.creature = c;
     creatures.push(c);
@@ -382,8 +374,8 @@
   };
   W.removeCreature = function (c) {
     const i = creatures.indexOf(c); if (i >= 0) creatures.splice(i, 1);
-    scene.remove(c.group); scene.remove(c.trail);
-    c.trail.geometry.dispose(); c.tex.dispose(); c.mat.dispose(); c.hit.geometry.dispose();
+    scene.remove(c.group);
+    c.tex.dispose(); c.mat.dispose(); c.hit.geometry.dispose();
     if (cam.follow === c) cam.follow = null;
   };
   W.updateCreature = function (c, x, y, z, state, scale) {
@@ -405,14 +397,6 @@
     else if (state === 'act') frame = Math.floor(t * 2.5 + c.bob) % 2;
     else if (state === 'rest' && c.restT > 1.5) frame = FRAME_REST;
     if (frame !== c.frame || flip !== c.flipped) setFrame(c, frame, flip);
-    if (c.lastTrail.distanceTo(g.position) > 0.22) {
-      c.lastTrail.copy(g.position);
-      const i = c.tn % c.tN;
-      c.tp.set([x, Math.max(0.3, y - 0.25), z], i * 3);
-      c.tn++;
-      c.trail.geometry.attributes.position.needsUpdate = true;
-      c.trail.geometry.setDrawRange(0, Math.min(c.tn, c.tN));
-    }
     const moving = state === 'wander' || state === 'flee';
     c.sprite.position.y = moving ? Math.abs(Math.sin(t * (state === 'flee' ? 14 : 7) + c.bob)) * 0.09 : 0;
     c.mat.opacity = frame === FRAME_REST ? 0.9 : 1;
