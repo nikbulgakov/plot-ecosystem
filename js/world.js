@@ -125,7 +125,8 @@
     const p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const v = new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i));
-      const n = 1 + 0.16 * Math.sin(v.x * 3.1 + v.y * 2.3) * Math.cos(v.z * 2.7 + v.x) + (Math.random() - 0.5) * 0.06;
+      // deterministic per position so faces that share a corner stay sealed (the geometry is non-indexed)
+      const n = 1 + 0.16 * Math.sin(v.x * 3.1 + v.y * 2.3) * Math.cos(v.z * 2.7 + v.x) + 0.03 * Math.sin(v.x * 12.9 + v.y * 78.2 + v.z * 37.1);
       v.multiplyScalar(n); p.setXYZ(i, v.x, v.y * 0.72, v.z);
     }
     geo.computeVertexNormals();
