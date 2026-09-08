@@ -7,7 +7,22 @@
   let W, A, emit;
   const agents = [];
   const st = { minutes: 14 * 60 + 55, hour: 14.9, weather: 'after rain', weatherT: 0, temp: 12, activity: 0, tension: 0, wind: 0.15, rainAmount: 0.12, mood: 'forest',
-    live: false, place: null, sunrise: 6.2, sunset: 19.5, utcOffset: null, liveTemp: null, liveWind: null, storm: false };
+    live: false, place: null, sunrise: 6.2, sunset: 19.5, utcOffset: null, liveTemp: null, liveWind: null, storm: false, snowCover: 0 };
+
+  /* ---------- season: by month at the place, flipped south of the equator ---------- */
+  const DRY = [0.78, 0.72, 0.5, 0.2, 0.05, 0, 0, 0.05, 0.25, 0.55, 0.72, 0.78];
+  const SEASON_NAMES = ['deep winter', 'late winter', 'early spring', 'spring', 'late spring', 'early summer', 'high summer', 'late summer', 'early autumn', 'autumn', 'late autumn', 'first frosts'];
+  function seasonMonth() {
+    const m = new Date(Date.now() + (st.utcOffset || 0) * 1000).getUTCMonth();
+    const lat = (window.Weather && Weather.place() && Weather.place().lat != null) ? Weather.place().lat : 55;
+    return lat < 0 ? (m + 6) % 12 : m;
+  }
+  S.season = function () {
+    const m = seasonMonth();
+    let dry = DRY[m];
+    if (st.temp > 20) dry *= 0.6; else if (st.temp < 3) dry = Math.max(dry, 0.5); // a warm spell greens up, a cold one browns off
+    return { month: m, dry, name: SEASON_NAMES[m] };
+  };
   S.state = st;
   const timers = {};
 
@@ -243,7 +258,7 @@
     // light remarks
     if ((timers.light || 0) <= 0) {
       timers.light = rnd(60, 110);
-      const t = st.weather === 'snow' ? pick(['snow settles on the pink stones and stays', 'the grass bends under a thin white weight', 'flakes drift through the beam without a sound']) : isNight() ? pick(['the plot is a dark bowl, only sound now', 'stars between the branches, nothing moves for a while']) : isDusk() ? pick(['the light fails along the west edge of the plot', 'colour drains out of the flower heads']) : isDawn() ? pick(['grey light finds the top of the oak first', 'mist lifting off the grass in threads']) : st.weather === 'fog' ? 'fog sits in the bowl of the plot, sound carries oddly' : pick(['a shaft of light picks out the pink stones', 'the flowers hold still in the warm air']);
+      const t = st.weather === 'snow' ? pick(['snow settles on the pink stones and stays', 'the grass bends under a thin white weight', 'flakes drift through the beam without a sound']) : st.snowCover > 0.4 ? pick(['old snow lies in the hollows, grey at the edges', 'tracks cross the snow and stop at the big rock', 'the verge is white and very quiet']) : S.season().dry > 0.5 ? pick(['the grass has gone to straw, it rattles in the wind', 'seed heads stand dry and pale along the edge', 'the verge is the colour of old paper']) : isNight() ? pick(['the plot is a dark bowl, only sound now', 'stars between the branches, nothing moves for a while']) : isDusk() ? pick(['the light fails along the west edge of the plot', 'colour drains out of the flower heads']) : isDawn() ? pick(['grey light finds the top of the oak first', 'mist lifting off the grass in threads']) : st.weather === 'fog' ? 'fog sits in the bowl of the plot, sound carries oddly' : pick(['a shaft of light picks out the pink stones', 'the flowers hold still in the warm air']);
       say(null, t, { pluck: false });
     }
     st.gust = Math.max(0, (st.gust || 0) - dt * 0.4);
@@ -281,6 +296,7 @@
     st.liveTemp = d.temp; st.liveWind = clamp(d.windKmh / 40, 0.05, 0.9); st.storm = !!d.storm;
     if (first) {
       st.temp = d.temp;
+      if (d.temp < -1 && st.snowCover < 0.5 && (d.state === 'snow' || d.recentPrecipitation > 0.3)) st.snowCover = 0.6; // arrived to a white plot
       st.minutes = localMinutes(); st.hour = st.minutes / 60;
       if (d.state !== st.weather) { st.weather = d.state; A.setWeather(d.state); st.rainAmount = RAIN[d.state]; }
       say(null, `the plot syncs with the sky over ${d.place.name.toLowerCase()}: ${Weather.describe(d)}`, { kind: 'hot', degree: 4, octave: 1, pluckP: 1, vol: 0.14 });
@@ -308,6 +324,9 @@
     st.wind += (windBase + (st.gust || 0) * 0.6 - st.wind) * dt * 0.5;
     const tempTarget = st.live ? st.liveTemp : 9 + 7 * Math.max(0, 1 - Math.abs(st.hour - 14) / 8) - (isWet() ? 3 : 0) - (st.weather === 'fog' ? 2 : 0) + (st.weather === 'clear' ? 1.5 : 0);
     st.temp += (tempTarget - st.temp) * dt * 0.02;
+    // snow cover: builds while it snows, holds in the cold, melts away above freezing
+    const snowTarget = st.weather === 'snow' ? 1 : st.temp < 0.5 ? st.snowCover : 0;
+    st.snowCover += (snowTarget - st.snowCover) * dt * (snowTarget > st.snowCover ? 0.01 : 0.003);
     for (const a of agents) tickAgent(a, dt);
     interactions();
     environment(dt);

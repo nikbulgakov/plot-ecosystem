@@ -51,6 +51,8 @@
     fillBlocks(actBlocks, s.activity); $('ui-act-n').textContent = Math.round(s.activity * 100) + '%';
     fillBlocks(tenBlocks, s.tension); $('ui-ten-n').textContent = s.tension.toFixed(2);
     $('sky-mode').textContent = s.live ? 'live sky' : 'simulated sky';
+    const se = Sim.season();
+    $('ui-season').textContent = s.snowCover > 0.4 ? 'snow' : se.name;
   }
 
   function drawWave() {
@@ -85,6 +87,7 @@
     Life.tick(dt, Sim.state);
     const s = Sim.state;
     World.setAtmosphere({ hour: s.hour, mood: s.mood, rainAmount: s.rainAmount, wind: s.wind, day: Sim.daylight(), dusk: Sim.twilight(), snow: s.weather === 'snow' });
+    World.setSeason({ dry: Sim.season().dry, snow: s.snowCover });
     updatePanel();
     drawWave();
     drawAvatar(performance.now() / 1000);
@@ -106,6 +109,7 @@
     const saved = Life.load();
     if (saved) {
       for (const e of saved.log) renderEvent(e.t, e.text, e.kind);
+      Sim.state.snowCover = saved.snow || 0;
       Life.spawnAll();
       World.setFlowerDensity(saved.flowers, true);
       addEvent({ text: `the verge wakes up. day ${Math.floor(Life.age()) + 1}, ${Life.population().count} creatures`, kind: 'hot' });

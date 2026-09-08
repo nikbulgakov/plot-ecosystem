@@ -35,9 +35,25 @@
       grassMesh.setColorAt(i, col);
     }
     grassMesh.instanceColor.needsUpdate = true;
-    if (ground) ground.material.color.setHex(p.ground);
+    groundBase.setHex(p.ground);
+    applySeasonGround();
   };
   W.palettes = () => Object.keys(PALETTES);
+  // season: dry 0..1 (green → straw), snow 0..1 (cover)
+  const groundBase = new THREE.Color(0x0a1608), groundDry = new THREE.Color(0x241c10), groundSnow = new THREE.Color(0xaeb8c4), groundTmp = new THREE.Color();
+  let season = { dry: 0, snow: 0 };
+  function applySeasonGround() {
+    if (!ground) return;
+    groundTmp.copy(groundBase).lerp(groundDry, season.dry).lerp(groundSnow, season.snow);
+    ground.material.color.copy(groundTmp);
+  }
+  W.setSeason = function (s) {
+    const dry = Math.max(0, Math.min(1, s.dry || 0)), snow = Math.max(0, Math.min(1, s.snow || 0));
+    if (Math.abs(dry - season.dry) < 0.002 && Math.abs(snow - season.snow) < 0.002) return;
+    season = { dry, snow };
+    if (grassMat) { grassMat.uniforms.uDry.value = dry; grassMat.uniforms.uSnow.value = snow; }
+    applySeasonGround();
+  };
 
   /* ---------- grass ---------- */
   function makeGrass(count) {
@@ -50,7 +66,7 @@
       pos.setZ(i, Math.sin(y * 1.4) * 0.05);
     }
     grassMat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uWind: { value: 0.5 }, uRadius: { value: R }, uLight: { value: new THREE.Color(1, 1, 1) }, uAmb: { value: 0.45 } },
+      uniforms: { uTime: { value: 0 }, uWind: { value: 0.5 }, uRadius: { value: R }, uLight: { value: new THREE.Color(1, 1, 1) }, uAmb: { value: 0.45 }, uDry: { value: 0 }, uSnow: { value: 0 } },
       vertexShader: `
         uniform float uTime, uWind, uRadius;
         varying float vH, vFade; varying vec3 vCol;
@@ -69,10 +85,16 @@
           gl_Position = projectionMatrix * modelViewMatrix * wp;
         }`,
       fragmentShader: `
-        uniform vec3 uLight; uniform float uAmb;
+        uniform vec3 uLight; uniform float uAmb, uDry, uSnow;
         varying float vH, vFade; varying vec3 vCol;
         void main(){
           vec3 c = vCol * mix(0.25, 1.0, pow(vH,1.3));
+          // the season: dead straw in autumn and winter, a cover of snow when the sky says so
+          float lum = dot(c, vec3(0.3, 0.59, 0.11));
+          vec3 dry = vec3(0.72, 0.56, 0.27) * (lum * 2.2 + 0.06);
+          c = mix(c, dry, uDry);
+          vec3 snow = vec3(0.84, 0.88, 0.95) * (0.5 + 0.5 * pow(vH, 1.2));
+          c = mix(c, snow, uSnow * smoothstep(0.15, 0.7, vH + uSnow * 0.5));
           c *= uLight * (uAmb + 0.75 * vFade);
           c *= vFade;
           gl_FragColor = vec4(c, 1.0);
@@ -167,7 +189,7 @@
   function applyFlowers(dt) {
     if (!flowers) return;
     flowerNow += (flowerTarget - flowerNow) * Math.min(1, dt * 0.8);
-    const n = Math.floor(flowers.max * flowerNow);
+    const n = Math.floor(flowers.max * flowerNow * (1 - season.snow * 0.95));
     if (flowers.heads.count !== n) { flowers.heads.count = n; flowers.stems.geometry.setDrawRange(0, n * 2); }
   }
 

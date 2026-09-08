@@ -193,6 +193,7 @@
     if (simState.weather === 'snow') t.snowHours += h; else if (simState.rainAmount > 0.3) t.rainHours += h;
     if (simState.storm) t.stormHours += h;
     t.minTemp = Math.min(t.minTemp, simState.temp); t.maxTemp = Math.max(t.maxTemp, simState.temp);
+    state.snow = simState.snowCover;
     if (!saveTimer) saveTimer = setTimeout(() => { saveTimer = null; L.save(); }, 1000);
   };
   L.population = function () {
