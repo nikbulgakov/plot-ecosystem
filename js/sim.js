@@ -42,7 +42,7 @@
       pos: { x: def.home.x + rnd(-1, 1), z: def.home.z + rnd(-1, 1) }, y: def.y || 0.25,
       state: 'rest', t: rnd(1, 4), target: null, speed: 0.6, vel: 0, mood: 0, lastAct: '', cooldown: {},
     }, def);
-    a.mesh = W.addCreature({ shape: def.shape, color: def.color, dot: def.dot, size: def.size, trail: def.trail });
+    a.mesh = W.addCreature({ sprite: def.sprite || def.species, size: def.size, trail: def.trail });
     a.meta = def.meta || {};
     agents.push(a);
     return a;
@@ -77,7 +77,7 @@
   /* Each species: activity(ctx) 0..1, actions: list of {w(weight fn), dur, run(agent)} */
   const SPECIES = {
     nuthatch: {
-      shape: 'cube', color: 0x27e8c8, dot: 0xffe066, size: 0.75, home: { x: OAK.x, z: OAK.z, r: 1.2 }, y: 1.6, speed: 0.5,
+      sprite: 'nuthatch', size: 0.8, home: { x: OAK.x, z: OAK.z, r: 1.2 }, y: 1.6, speed: 0.5,
       activity: () => isNight() ? 0.05 : st.weather === 'rain' ? 0.35 : 0.8,
       actions: [
         { w: () => 3, dur: 2, run(a) { a.y = clamp(a.y - rnd(0.15, 0.35), 0.75, 2.3); a.target = randomNear(OAK, 0.6); a.state = 'wander';
@@ -88,7 +88,7 @@
       ],
     },
     badger: {
-      shape: 'cube', color: 0xff2d6e, dot: 0xffb347, size: 1.15, home: { x: 0, z: 0, r: 6.5 }, y: 0.8, speed: 0.55,
+      sprite: 'badger', size: 1.0, home: { x: 0, z: 0, r: 6.5 }, y: 0.7, speed: 0.55,
       activity: () => isNight() ? 0.9 : isDusk() ? 0.8 : st.weather === 'after rain' ? 0.5 : 0.2,
       actions: [
         { w: () => 2, dur: 5, run(a) { a.target = randomNear(a.home, a.home.r); a.state = 'wander'; say(a, pick(['the badger noses forward through the wet grass', 'badger ambles low along the edge of the light', 'the badger follows an old track between the stones', 'badger pauses, lifts its snout, moves on']), { sfx: 'step', degree: 0, octave: -1, vol: 0.09 }); } },
@@ -99,7 +99,7 @@
       ],
     },
     toad: {
-      shape: 'ring', color: 0xffd23f, dot: 0xff8c00, size: 0.9, home: { x: 6.2, z: 1.6, r: 1.8 }, y: 0.6, speed: 0.35,
+      sprite: 'toad', size: 0.85, home: { x: 6.2, z: 1.6, r: 1.8 }, y: 0.55, speed: 0.35,
       activity: () => isWet() ? 0.9 : isNight() ? 0.7 : 0.25,
       actions: [
         { w: () => (isWet() || isNight() ? 2.5 : 0.7), dur: 3, run(a) { a.state = 'act'; say(a, pick(['deep rhythmic toad croaking by stream', 'a single toad answers the stream from the reeds', 'toad croaks twice, then the rain again', 'low toad pulse under the sound of water']), { sfx: 'croak', repeat: Math.random() < 0.5, degree: 0, octave: -1, kind: 'hot' }); } },
@@ -108,7 +108,7 @@
       ],
     },
     vole: {
-      shape: 'diamond', color: 0xff3fa0, dot: 0xffffff, size: 0.6, home: { x: 1.2, z: 0.6, r: 3.2 }, y: 0.55, speed: 1.4,
+      sprite: 'vole', size: 0.75, home: { x: 1.2, z: 0.6, r: 3.2 }, y: 0.5, speed: 1.4,
       activity: () => 0.75,
       actions: [
         { w: () => 3, dur: 1.5, run(a) { const r = pick(ROCKS); a.target = { x: r[0] + rnd(-0.5, 0.5), z: r[1] + rnd(-0.5, 0.5) }; a.state = 'wander'; say(a, pick(['the vole darts between two stones', 'a vole runs the tunnel of bent grass', 'vole nips a seed head and drags it under a rock', 'the vole freezes, then flickers to the next stone']), { sfx: 'rustle', degree: 7, octave: 1, pluckP: 0.4, vol: 0.07 }); } },
@@ -117,7 +117,7 @@
       ],
     },
     beetle: {
-      shape: 'tetra', color: 0xf4f4f0, dot: 0xff6a00, size: 0.55, home: { x: -0.5, z: 2.5, r: 4 }, y: 0.5, speed: 0.4,
+      sprite: 'beetle', size: 0.65, home: { x: -0.5, z: 2.5, r: 4 }, y: 0.5, speed: 0.4,
       activity: () => st.weather === 'rain' ? 0.2 : 0.7,
       actions: [
         { w: () => 3, dur: 3, run(a) { a.target = randomNear(a.home, a.home.r); a.state = 'wander'; say(a, pick(['a ground beetle crosses the bare patch', 'beetle climbs a stalk and drops off again', 'the beetle pushes through a tangle of stems', 'beetle circles a puddle rim, testing the edge']), { degree: 5, octave: 1, pluckP: 0.35, vol: 0.06 }); } },
@@ -125,7 +125,7 @@
       ],
     },
     moth: {
-      shape: 'cone', color: 0xf2f2ff, dot: 0xff4da6, size: 0.65, home: { x: 2, z: -1.5, r: 5 }, y: 1.3, speed: 0.9,
+      sprite: 'moth', size: 0.7, home: { x: 2, z: -1.5, r: 5 }, y: 1.3, speed: 0.9,
       activity: () => (isNight() || isDusk()) && st.weather !== 'rain' ? 0.9 : 0.05,
       actions: [
         { w: () => 3, dur: 2, run(a) { a.target = randomNear(a.home, a.home.r); a.y = rnd(0.9, 1.7); a.state = 'wander'; say(a, pick(['a moth loops through ' + lightWord(), 'the moth flutters from flower head to flower head', 'moth circles nothing in particular above the grass', 'a pale moth blunders against a seed stalk']), { sfx: 'flutter', degree: 8, octave: 1, pluckP: 0.4, vol: 0.06 }); } },
@@ -133,7 +133,7 @@
       ],
     },
     wren: {
-      shape: 'pyramid', color: 0x27e8c8, dot: 0xffffff, size: 0.7, home: { x: 4.5, z: -3.5, r: 3 }, y: 0.9, speed: 1.1,
+      sprite: 'wren', size: 0.8, home: { x: 4.5, z: -3.5, r: 3 }, y: 0.9, speed: 1.1,
       activity: () => isNight() ? 0.05 : isDawn() || st.weather === 'clear' ? 0.9 : 0.5,
       actions: [
         { w: () => 2, dur: 2, run(a) { a.target = randomNear(a.home, a.home.r); a.y = rnd(0.7, 1.3); a.state = 'wander'; say(a, pick(['the wren hops along the fallen branch', 'wren flits low through the stalks, tail cocked', 'the wren picks something from the rotting wood']), { sfx: Math.random() < 0.3 ? 'flutter' : null, degree: 6, octave: 1, pluckP: 0.4, vol: 0.07 }); } },
@@ -142,7 +142,7 @@
       ],
     },
     slug: {
-      shape: 'octa', color: 0xd9c9b5, dot: 0x9a7a60, size: 0.5, home: { x: -3.5, z: 1, r: 2.5 }, y: 0.5, speed: 0.12,
+      sprite: 'slug', size: 0.65, home: { x: -3.5, z: 1, r: 2.5 }, y: 0.45, speed: 0.12,
       activity: () => isWet() ? 0.9 : isNight() ? 0.5 : 0.08,
       actions: [
         { w: () => 2, dur: 8, run(a) { a.target = randomNear(a.home, a.home.r); a.state = 'wander'; say(a, pick(['a slug glides out across the wet stone', 'the slug leaves a slow line up the fallen branch', 'slug stretches toward a soft fallen leaf']), { degree: 3, octave: -1, pluckP: 0.3, vol: 0.06 }); } },

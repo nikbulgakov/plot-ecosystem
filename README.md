@@ -1,6 +1,11 @@
-# Plot Ecosystem
+# Verge
 
-A small simulated world in the browser: a circular plot of grass with wireframe creatures, red dotted trails, a generative soundtrack made from what the inhabitants do, and a **real sky**: time, weather, temperature, wind, sunrise and sunset come from the place you are in, so no two plots look the same.
+A small simulated wild place in the browser, drawn like a 16-bit game and dressed like a modern app: a verge of grass with a few stones and a dead oak, creatures as pixel sprites with names, red pixel trails, a generative soundtrack made from what the inhabitants do, and a **real sky**: time, weather, temperature, wind, sunrise and sunset come from the place you are in, so no two verges look the same. The world keeps living while the page is closed.
+
+## Look
+
+- **Scene**: the Three.js world is rendered to a low-resolution target (about 420 px wide), upscaled without smoothing, quantised to 12 levels per channel with a 4×4 ordered dither, and topped with a faint bloom. Creatures are 8×8-ish pixel sprites with a one-pixel outline that flip to face the way they move.
+- **Interface**: dark glass panels with blur and a thin light edge, Geist for text and Geist Mono for numbers, a pixel display face (Pixelify Sans) only for the wordmark and section titles, Silkscreen for micro-labels, pixel icons on an 8×8 grid, block meters, smooth sliders, a segmented mood control, a now-playing "island" and an amber notification card for what happened while you were away. One warm accent, green for live, red for alarm.
 
 ## Real weather
 
@@ -41,5 +46,5 @@ Then open http://localhost:8765 and click to enter (audio needs a user gesture).
 
 - Drag to orbit, wheel to zoom, click a creature to follow it
 - Sliders: music and world volume
-- Coloured dots: dusk / forest / night mood
-- CLOSE hides the interface, RECORD captures the audio
+- Segmented control: dusk / forest / night mood
+- Hide tucks the interface away, Record captures the audio

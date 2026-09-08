@@ -3,191 +3,245 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Plot Ecosystem</title>
-<link href="https://fonts.googleapis.com/css2?family=Silkscreen&family=VT323&display=swap" rel="stylesheet">
+<title>Verge</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Pixelify+Sans:wght@500;600&family=Silkscreen&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#c9e59a;
-    --ink-dim:#7f9a5d;
-    --panel:rgba(14,16,12,.78);
-    --line:rgba(201,229,154,.16);
-    --accent:#d5ff7a;
-    --red:#ff3f5f;
-    --orange:#ff9f2e;
-    --blue:#6a8cff;
+    --night:#0c0e12;
+    --text:#f5f5f7;
+    --text-2:rgba(245,245,247,.55);
+    --text-3:rgba(245,245,247,.38);
+    --glass:rgba(18,20,26,.64);
+    --edge:rgba(255,255,255,.09);
+    --amber:#ffb454;
+    --green:#34c759;
+    --red:#ff453a;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:#000;overflow:hidden;color:var(--ink);
-    font-family:"VT323","Courier New",monospace;font-size:15px;letter-spacing:.02em;
-    -webkit-font-smoothing:none;}
+  html,body{margin:0;height:100%;background:var(--night);overflow:hidden;color:var(--text);
+    font-family:"Geist",-apple-system,"SF Pro Text","Segoe UI",system-ui,sans-serif;font-size:12.5px;line-height:1.35;-webkit-font-smoothing:antialiased}
   canvas#scene{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
   canvas#scene:active{cursor:grabbing}
+  button{font:inherit;color:inherit}
 
   .ui{position:fixed;z-index:5;pointer-events:none}
   .ui *{pointer-events:auto}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;
-    backdrop-filter:blur(6px);padding:10px 12px;width:236px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
-  .panel + .panel{margin-top:10px}
-  .panel h2{margin:0 0 8px;font:11px/1 "Silkscreen","VT323",monospace;letter-spacing:.06em;
-    display:flex;align-items:center;gap:8px;color:var(--ink);text-transform:uppercase}
-  .panel h2 .chev{margin-left:auto;color:var(--ink-dim);font-size:10px;cursor:pointer;user-select:none}
-  .panel.collapsed .body{display:none}
-  .ico{width:12px;height:12px;display:inline-block}
+  .glass{background:var(--glass);border:1px solid var(--edge);border-radius:16px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 24px 60px rgba(0,0,0,.55);
+    backdrop-filter:blur(22px) saturate(1.2);-webkit-backdrop-filter:blur(22px) saturate(1.2)}
+  .pixel{font-family:"Pixelify Sans","Geist",sans-serif;font-weight:500;letter-spacing:.02em}
+  .micro{font-family:"Silkscreen","Geist Mono",monospace;font-size:8px;line-height:10px;letter-spacing:.06em;color:var(--text-3);text-transform:uppercase}
+  .mono{font-family:"Geist Mono","SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+  .ico{width:12px;height:12px;display:block;flex:none}
 
-  #left{left:12px;top:70px}
-  #right{right:12px;top:70px}
-
-  .row{display:grid;grid-template-columns:84px 1fr;align-items:center;gap:8px;
-    font-size:11px;line-height:14px;text-transform:uppercase;font-family:"Silkscreen","VT323",monospace}
-  .row + .row{margin-top:6px}
-  .row .k{color:var(--ink-dim);font-size:9px}
-  .row .v{color:#e8f5cf}
-  .row .v.place{cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .row .v.place:hover{color:var(--accent)}
-  .live{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);margin-left:6px;vertical-align:middle;animation:pulse 2.4s ease-in-out infinite}
+  /* wordmark */
+  #brand{left:32px;top:26px;display:flex;flex-direction:column;gap:6px}
+  #brand .wm{display:flex;align-items:center;gap:10px;font-family:"Pixelify Sans",sans-serif;font-weight:600;font-size:26px;line-height:26px;letter-spacing:.06em;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+  #brand .sub{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2);text-shadow:0 1px 6px rgba(0,0,0,.6)}
+  #brand .sub .place{color:rgba(245,245,247,.88);cursor:pointer;text-decoration:underline dotted rgba(245,245,247,.35);text-underline-offset:3px}
+  #brand .sub .place:hover{color:var(--amber)}
+  .live{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px rgba(52,199,89,.8);animation:pulse 2.4s ease-in-out infinite}
   @keyframes pulse{50%{opacity:.25}}
-  .meter{display:flex;align-items:center;gap:8px}
-  .meter .bar{flex:1;height:2px;background:rgba(255,255,255,.12);position:relative}
-  .meter .bar i{position:absolute;left:0;top:0;height:100%;background:var(--accent);width:0;transition:width .4s}
-  .meter .bar.red i{background:var(--red)}
-  .meter .n{width:32px;text-align:right;font-size:9px}
-  .sep{height:1px;background:var(--line);margin:10px 0}
-  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:2px;background:rgba(255,255,255,.14);outline:none;margin:0}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:9px;height:9px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 6px rgba(213,255,122,.6)}
-  input[type=range]::-moz-range-thumb{width:9px;height:9px;border-radius:50%;background:var(--accent);border:0;cursor:pointer}
 
-  .how p{margin:0 0 9px;font-size:9px;line-height:13px;text-transform:uppercase;
-    font-family:"Silkscreen","VT323",monospace;color:#b9cf98}
-
-  #away{border:1px solid rgba(255,208,122,.35);background:rgba(255,208,122,.07);border-radius:4px;padding:8px 8px 4px;margin-bottom:8px}
-  .away-h{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font:9px/12px "Silkscreen","VT323",monospace;color:#ffd07a;text-transform:uppercase;margin-bottom:6px}
-  #away-x{background:none;border:0;color:#ffd07a;cursor:pointer;font-size:12px;line-height:1;padding:0;flex:none}
-  #away-list{max-height:150px;overflow-y:auto;scrollbar-width:thin}
-  #away-list .ev .t{color:#b58b4a}
-  #log{height:300px;overflow-y:auto;padding-right:6px;scrollbar-width:thin;scrollbar-color:rgba(201,229,154,.35) transparent}
-  #log::-webkit-scrollbar{width:4px}
-  #log::-webkit-scrollbar-thumb{background:rgba(201,229,154,.35)}
-  .ev{display:grid;grid-template-columns:34px 1fr;gap:8px;font-size:9px;line-height:12px;
-    text-transform:uppercase;font-family:"Silkscreen","VT323",monospace;margin-bottom:7px;
-    animation:fade .5s ease-out}
-  .ev .t{color:var(--ink-dim)}
-  .ev .m{color:#dcefc0}
-  .ev.hot .m{color:#ffd07a}
-  .ev.alarm .m{color:#ff8a9c}
-  @keyframes fade{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
-
-  /* top bar */
-  #top{left:0;right:0;top:12px;display:flex;justify-content:center;align-items:center;gap:14px}
-  #player{display:flex;align-items:center;gap:10px;background:#dff5a6;color:#1b2410;border-radius:8px;
-    padding:5px 12px 5px 6px;min-width:280px;max-width:330px;font-family:"Silkscreen",monospace;font-size:9px;text-transform:uppercase}
-  #player .av{width:26px;height:26px;border-radius:50%;background:#2b3b1a;overflow:hidden;flex:none;border:1px solid #6d8a3f}
-  #player .av canvas{width:100%;height:100%;display:block}
-  #player .bars{display:flex;gap:2px;align-items:flex-end;height:12px;flex:none}
-  #player .bars i{width:2px;background:#1b2410;height:3px}
-  #player .tick{flex:1;overflow:hidden;white-space:nowrap;position:relative;height:12px}
-  #player .tick span{display:inline-block;animation:tick 14s linear infinite;line-height:12px}
+  /* island */
+  #top{left:0;right:0;top:22px;display:flex;justify-content:center}
+  #player{width:480px;height:52px;border-radius:26px;background:rgba(0,0,0,.82);border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 20px 50px rgba(0,0,0,.6);display:flex;align-items:center;gap:14px;padding:0 14px 0 10px}
+  #player .av{width:32px;height:32px;border-radius:9px;overflow:hidden;flex:none;background:#142012}
+  #player .av canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
+  #player .bars{display:flex;gap:2px;align-items:flex-end;height:14px;flex:none}
+  #player .bars i{width:3px;background:var(--amber);height:3px;border-radius:1px}
+  #player .tick{flex:1;overflow:hidden;min-width:0;display:flex;flex-direction:column;gap:2px}
+  #player .tick .line{white-space:nowrap;overflow:hidden;font-size:13px;font-weight:500}
+  #player .tick .line span{display:inline-block;animation:tick 14s linear infinite}
   @keyframes tick{to{transform:translateX(-50%)}}
-  #player button{background:none;border:0;color:#1b2410;cursor:pointer;font-size:12px;padding:0 2px;line-height:1}
-  #player button.off{opacity:.35}
-  .dots{display:flex;gap:10px;align-items:center}
-  .dot{width:22px;height:22px;border-radius:50%;border:0;cursor:pointer;display:grid;place-items:center;
-    transition:transform .15s;opacity:.85}
-  .dot:hover{transform:scale(1.1)}
-  .dot.on{transform:scale(1.25);opacity:1;box-shadow:0 0 12px currentColor}
-  .dot.o{background:var(--orange);color:var(--orange)}
-  .dot.g{background:#dff5a6;color:#dff5a6}
-  .dot.b{background:var(--blue);color:var(--blue)}
-  .dot svg{width:12px;height:12px}
-  #close{position:fixed;right:18px;top:20px;background:none;border:0;color:var(--ink);cursor:pointer;
-    font-family:"Silkscreen",monospace;font-size:9px;letter-spacing:.08em;z-index:6}
+  #player button{background:none;border:0;cursor:pointer;padding:4px;opacity:.75;display:grid;place-items:center}
+  #player button:hover{opacity:1}
+  #player button.off{opacity:.3}
+  #player button .ico{width:14px;height:14px}
 
-  /* bottom recorder */
-  #bottom{left:0;right:0;bottom:18px;display:flex;justify-content:center}
-  #rec{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);
-    border-radius:8px;padding:6px 14px;font-family:"Silkscreen",monospace;font-size:9px;text-transform:uppercase;
-    backdrop-filter:blur(6px)}
-  #rec .btn{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
-  #rec .btn b{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 6px var(--red)}
+  /* mood + hide */
+  #right-top{right:32px;top:24px;display:flex;gap:10px;align-items:center}
+  .seg{display:flex;padding:3px;border-radius:12px;background:rgba(18,20,26,.7);border:1px solid var(--edge);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+  .seg button{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:9px;font-size:12px;font-weight:500;color:var(--text-2);background:none;border:0;cursor:pointer}
+  .seg button:hover{color:var(--text)}
+  .seg button.on{background:rgba(255,255,255,.14);color:var(--text);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+  .ghost{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:12px;background:rgba(18,20,26,.7);border:1px solid var(--edge);
+    font-size:12px;font-weight:500;color:rgba(245,245,247,.75);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);cursor:pointer}
+  .ghost:hover{color:var(--text)}
+  #close{position:fixed;right:32px;top:24px;z-index:6;display:none}
+  body.nochrome #close{display:flex}
+
+  /* panels */
+  #left{left:32px;top:96px;display:flex;flex-direction:column;gap:14px;width:280px}
+  #right{right:32px;top:96px;width:296px;bottom:92px}
+  .panel{padding:16px 16px 14px;display:flex;flex-direction:column;gap:14px}
+  .panel h2{margin:0;display:flex;align-items:center;justify-content:space-between;font-size:15px;line-height:18px;font-weight:500}
+  .panel h2 .chev{cursor:pointer;opacity:.6}
+  .panel h2 .chev:hover{opacity:1}
+  .panel h2 .chev .ico{width:10px;height:10px;transition:transform .2s}
+  .panel.collapsed .body{display:none}
+  .panel.collapsed h2 .chev .ico{transform:rotate(180deg)}
+  .body{display:flex;flex-direction:column;gap:14px}
+
+  .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .tile{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+  .tile .k{display:flex;align-items:center;gap:6px;font-size:10.5px;line-height:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);font-weight:500}
+  .tile .k .ico{opacity:.55}
+  .tile .v{font-size:17px;line-height:20px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+  .tile .v small{font-weight:400;color:var(--text-2);font-size:12px}
+
+  .row{display:grid;grid-template-columns:72px 1fr 36px;align-items:center;gap:12px}
+  .row .k{font-size:10.5px;line-height:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);font-weight:500}
+  .row .n{font-size:11px;color:var(--text-2);text-align:right}
+  .blocks{display:flex;gap:2px}
+  .blocks i{display:block;flex:1;height:8px;background:rgba(255,255,255,.10);border-radius:1px}
+  .blocks i.on{background:var(--amber)}
+  .blocks.red i.on{background:var(--red)}
+  .rule{height:1px;background:rgba(255,255,255,.07)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--text) var(--p,35%),rgba(255,255,255,.12) var(--p,35%));outline:none;margin:0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 1px rgba(0,0,0,.15);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:0;box-shadow:0 1px 3px rgba(0,0,0,.5);cursor:pointer}
+
+  .how p{margin:0;font-size:12.5px;line-height:17px;color:rgba(245,245,247,.72)}
+  .how .body{gap:10px}
+
+  /* observations */
+  #p-log{height:100%;overflow:hidden}
+  #p-log .body{flex:1;min-height:0}
+  #log{flex:1;min-height:0;overflow-y:auto;padding-right:6px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+  #log::-webkit-scrollbar{width:4px}
+  #log::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
+  .chip{font-family:"Geist Mono",monospace;font-size:10px;line-height:16px;padding:0 6px;border-radius:6px;background:rgba(255,255,255,.08);color:rgba(245,245,247,.7);white-space:nowrap;flex:none}
+  .ev{display:grid;grid-template-columns:38px 8px 1fr;gap:8px;align-items:start;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);animation:fade .4s ease-out}
+  .ev .t{font-family:"Geist Mono",monospace;font-size:11px;line-height:16px;color:var(--text-3)}
+  .ev .d{width:6px;height:6px;margin-top:5px;background:transparent}
+  .ev .m{font-size:12.5px;line-height:16px;color:rgba(245,245,247,.86)}
+  .ev .m::first-letter{text-transform:uppercase}
+  .ev.hot .d{background:var(--amber)}
+  .ev.hot .m{color:var(--text)}
+  .ev.alarm .d{background:var(--red)}
+  .ev.alarm .m{color:#ff8a80}
+  @keyframes fade{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+  #away{border-radius:12px;background:rgba(255,180,84,.10);border:1px solid rgba(255,180,84,.28);padding:12px 12px 10px;display:flex;flex-direction:column;gap:8px;flex:none}
+  #away[hidden]{display:none}
+  #away .h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+  #away .h .ico{width:14px;height:14px}
+  #away-x{margin-left:auto;background:none;border:0;color:rgba(245,245,247,.45);font-size:16px;line-height:1;cursor:pointer;padding:0}
+  #away-x:hover{color:var(--text)}
+  #away-title{font-size:12px;line-height:16px;color:var(--text-2)}
+  #away-list{display:flex;flex-direction:column;gap:6px;max-height:150px;overflow-y:auto;scrollbar-width:thin}
+  .arow{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:16px}
+  .arow.alarm .m{color:#ff8a80}
+  .arow.hot .m{color:var(--text)}
+
+  /* recorder */
+  #bottom{left:0;right:0;bottom:22px;display:flex;justify-content:center}
+  #rec{width:360px;height:46px;border-radius:23px;background:rgba(0,0,0,.82);border:1px solid rgba(255,255,255,.08);box-shadow:0 20px 50px rgba(0,0,0,.6);
+    display:flex;align-items:center;gap:12px;padding:0 18px}
+  #rec .btn{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;font-size:12px;font-weight:500}
+  #rec .btn b{width:8px;height:8px;background:var(--red);box-shadow:0 0 10px rgba(255,69,58,.7)}
   #rec.recording .btn b{animation:blink 1s steps(2) infinite}
   @keyframes blink{50%{opacity:.2}}
-  #wave{width:170px;height:22px;display:block}
-  #rec .time{color:var(--ink-dim);min-width:34px;text-align:right}
-  #dl{color:var(--accent);text-decoration:none;display:none}
+  #wave{flex:1;height:18px;display:block;min-width:0}
+  #rec .time{font-size:12px;color:var(--text-2)}
+  #dl{color:var(--amber);text-decoration:none;font-size:12px;font-weight:500;display:none}
   #dl.show{display:inline}
 
-  #gate{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:rgba(0,0,0,.85);cursor:pointer}
-  #gate div{text-align:center;font-family:"Silkscreen",monospace;font-size:11px;text-transform:uppercase;line-height:2;letter-spacing:.08em}
-  #gate small{display:block;color:var(--ink-dim);font-size:9px}
+  /* cover */
+  #gate{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:rgba(8,9,12,.86);cursor:pointer;backdrop-filter:blur(10px)}
+  #gate .card{width:360px;padding:32px 32px 26px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px}
+  #gate .wm{font-family:"Pixelify Sans",sans-serif;font-weight:600;font-size:40px;line-height:40px;letter-spacing:.08em}
+  #gate p{margin:0;color:var(--text-2);font-size:13px;line-height:18px}
+  #gate .cta{margin-top:10px;padding:10px 18px;border-radius:12px;background:var(--text);color:#0c0e12;font-weight:600;font-size:13px}
   #gate.hide{display:none}
 
-  body.nochrome .ui,body.nochrome #close{display:none}
-  body.nochrome #close{display:block}
+  body.nochrome .ui{display:none}
 
-  @media (max-width:900px){
-    #left,#right{display:none}
-    #player{min-width:200px}
+  @media (max-width:980px){
+    #left,#right,#brand{display:none}
+    #player{width:min(480px,calc(100vw - 32px))}
   }
 </style>
 </head>
 <body>
 <canvas id="scene"></canvas>
 
-<div id="gate"><div>◉ click to enter the plot<small>sound on · headphones recommended</small></div></div>
+<div id="gate"><div class="card glass">
+  <svg viewBox="0 0 8 8" shape-rendering="crispEdges" style="width:28px;height:28px"><path fill="#ffb454" d="M3 0h2v1H3zM2 1h4v1H2zM1 2h6v2H1zM0 4h8v2H0zM3 6h2v2H3z"/></svg>
+  <div class="wm">VERGE</div>
+  <p>A small wild place that lives under your sky, and keeps living when you close the page.</p>
+  <div class="micro">sound on · headphones recommended</div>
+  <div class="cta">Open the verge</div>
+</div></div>
+
+<div class="ui" id="brand">
+  <div class="wm"><svg viewBox="0 0 8 8" shape-rendering="crispEdges" style="width:16px;height:16px"><path fill="#ffb454" d="M3 0h2v1H3zM2 1h4v1H2zM1 2h6v2H1zM0 4h8v2H0zM3 6h2v2H3z"/></svg>VERGE</div>
+  <div class="sub"><span>Field station</span><span style="opacity:.4">·</span><span class="place" id="ui-place" title="click to change the place">simulated</span></div>
+</div>
 
 <div class="ui" id="top">
   <div id="player">
-    <div class="av"><canvas id="avatar" width="26" height="26"></canvas></div>
+    <div class="av"><canvas id="avatar" width="8" height="8"></canvas></div>
     <div class="bars"><i></i><i></i><i></i><i></i></div>
-    <div class="tick"><span id="ticker">THE PLOT WAKES UP</span></div>
-    <button id="mute" title="mute/unmute">🔊</button>
-    <button id="loopbtn" title="auto-orbit" class="">⟲</button>
-  </div>
-  <div class="dots">
-    <button class="dot o" data-mood="dusk" title="dusk"></button>
-    <button class="dot g on" data-mood="forest" title="forest"><svg viewBox="0 0 12 12"><path d="M6 1 L9 6 H7.5 L10 10 H2 L4.5 6 H3 Z" fill="#1b2410"/></svg></button>
-    <button class="dot b" data-mood="night" title="night"></button>
+    <div class="tick"><div class="line"><span id="ticker">The verge wakes up</span></div><div class="micro" id="ticker-sub">Now happening</div></div>
+    <button id="mute" title="mute / unmute"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M0 3h2v2H0zM2 2h1v4H2zM3 1h1v6H3zM4 0h1v8H4zM6 2h1v1H6zM7 3h1v2H7zM6 5h1v1H6z"/></svg></button>
+    <button id="loopbtn" title="auto-orbit"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M2 0h4v1H2zM1 1h1v1H1zM6 1h1v1H6zM0 2h1v4H0zM7 2h1v2H7zM1 6h1v1H1zM2 7h4v1H2zM6 5h2v1H6zM5 4h1v1H5zM7 6h1v1H7z"/></svg></button>
   </div>
 </div>
-<button id="close">CLOSE</button>
+
+<div class="ui" id="right-top">
+  <div class="seg">
+    <button data-mood="dusk"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#ffb454" d="M3 0h2v1H3zM0 3h1v2H0zM7 3h1v2H7zM3 7h2v1H3zM2 2h4v4H2zM1 1h1v1H1zM6 1h1v1H6zM1 6h1v1H1zM6 6h1v1H6z"/></svg>Dusk</button>
+    <button data-mood="forest" class="on"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#7ed957" d="M3 0h2v1H3zM2 1h4v1H2zM1 2h6v2H1zM0 4h8v2H0zM3 6h2v2H3z"/></svg>Forest</button>
+    <button data-mood="night"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#8fb3ff" d="M2 0h3v1H2zM1 1h2v1H1zM0 2h2v4H0zM1 6h2v1H1zM2 7h3v1H2zM4 6h2v1H4zM5 5h2v1H5zM6 2h1v1H6z"/></svg>Night</button>
+  </div>
+  <button class="ghost" id="hide"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="rgba(245,245,247,.75)" d="M0 3h1v2H0zM1 2h1v1H1zM1 5h1v1H1zM2 1h4v1H2zM2 6h4v1H2zM6 2h1v1H6zM6 5h1v1H6zM7 3h1v2H7zM3 3h2v2H3z"/></svg>Hide</button>
+</div>
+<button class="ghost" id="close">Show interface</button>
 
 <div class="ui" id="left">
-  <div class="panel" id="p-eco">
-    <h2><svg class="ico" viewBox="0 0 12 12"><path d="M6 1 L9 6 H7.5 L10 10 H2 L4.5 6 H3 Z" fill="#c9e59a"/></svg>plot ecosystem<span class="chev">⌄</span></h2>
+  <div class="panel glass" id="p-eco">
+    <h2><span class="pixel">Status</span><span style="display:flex;align-items:center;gap:10px"><span class="micro" id="sky-mode">simulated sky</span><span class="chev"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M0 2h1v1H0zM1 3h1v1H1zM2 4h1v1H2zM3 5h2v1H3zM5 4h1v1H5zM6 3h1v1H6zM7 2h1v1H7z"/></svg></span></span></h2>
     <div class="body">
-      <div class="row"><span class="k">place</span><span class="v place" id="ui-place" title="click to change the place">simulated</span></div>
-      <div class="row"><span class="k">time</span><span class="v" id="ui-time">14:55</span></div>
-      <div class="row"><span class="k">weather</span><span class="v" id="ui-weather">after rain</span></div>
-      <div class="row"><span class="k">temperature</span><span class="v" id="ui-temp">12°C</span></div>
-      <div class="row"><span class="k">wind</span><span class="v" id="ui-wind">—</span></div>
-      <div class="row"><span class="k">plot age</span><span class="v" id="ui-age">day 1</span></div>
-      <div class="row"><span class="k">population</span><span class="v" id="ui-pop">—</span></div>
-      <div class="row"><span class="k">activity</span><span class="meter"><span class="bar"><i id="ui-act"></i></span><span class="n" id="ui-act-n">0%</span></span></div>
-      <div class="row"><span class="k">tension</span><span class="meter"><span class="bar red"><i id="ui-ten"></i></span><span class="n" id="ui-ten-n">0.00</span></span></div>
-      <div class="sep"></div>
-      <div class="row"><span class="k">music</span><span class="meter"><input type="range" id="vol-music" min="0" max="100" value="35"><span class="n" id="vol-music-n">35%</span></span></div>
-      <div class="row"><span class="k">world</span><span class="meter"><input type="range" id="vol-world" min="0" max="100" value="35"><span class="n" id="vol-world-n">35%</span></span></div>
+      <div class="tiles">
+        <div class="tile"><div class="k"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M2 0h4v1H2zM1 1h1v1H1zM6 1h1v1H6zM0 2h1v4H0zM7 2h1v4H7zM1 6h1v1H1zM6 6h1v1H6zM2 7h4v1H2zM3 2h1v3H3zM4 4h2v1H4z"/></svg>Time</div><div class="v mono" id="ui-time">14:55</div></div>
+        <div class="tile"><div class="k"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M2 2h3v1H2zM1 3h5v1H1zM5 3h2v1H5zM0 4h8v2H0zM1 6h6v1H1z"/></svg>Weather</div><div class="v" id="ui-weather">after rain</div></div>
+        <div class="tile"><div class="k"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M3 0h2v5H3zM2 5h4v2H2zM3 7h2v1H3z"/></svg>Temp</div><div class="v mono" id="ui-temp">12°C</div></div>
+        <div class="tile"><div class="k"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M0 1h5v1H0zM6 1h1v1H6zM0 3h7v1H0zM0 5h4v1H0zM5 5h1v1H5z"/></svg>Wind</div><div class="v mono" id="ui-wind">—</div></div>
+        <div class="tile"><div class="k"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M0 2h8v1H0zM0 3h1v4H0zM7 3h1v4H7zM0 7h8v1H0zM2 0h1v2H2zM5 0h1v2H5zM2 4h2v2H2z"/></svg>Plot age</div><div class="v mono" id="ui-age">Day 1</div></div>
+        <div class="tile"><div class="k"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M1 1h1v1H1zM3 0h1v1H3zM5 1h1v1H5zM2 3h4v1H2zM1 4h6v3H1zM2 7h4v1H2z"/></svg>Population</div><div class="v" id="ui-pop">—</div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="row"><span class="k">Activity</span><div class="blocks" id="ui-act"></div><span class="n mono" id="ui-act-n">0%</span></div>
+        <div class="row"><span class="k">Tension</span><div class="blocks red" id="ui-ten"></div><span class="n mono" id="ui-ten-n">0.00</span></div>
+      </div>
+      <div class="rule"></div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="row"><span class="k">Music</span><input type="range" id="vol-music" min="0" max="100" value="35" style="--p:35%"><span class="n mono" id="vol-music-n">35%</span></div>
+        <div class="row"><span class="k">World</span><input type="range" id="vol-world" min="0" max="100" value="35" style="--p:35%"><span class="n mono" id="vol-world-n">35%</span></div>
+      </div>
     </div>
   </div>
-  <div class="panel how" id="p-how">
-    <h2>how it works<span class="chev">⌄</span></h2>
+  <div class="panel glass how" id="p-how">
+    <h2><span class="pixel">How it works</span><span class="chev"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M0 2h1v1H0zM1 3h1v1H1zM2 4h1v1H2zM3 5h2v1H3zM5 4h1v1H5zM6 3h1v1H6zM7 2h1v1H7z"/></svg></span></h2>
     <div class="body">
-      <p>What you see is a simulated little world.</p>
-      <p>The weather changes over time, influencing the actions of the inhabitants and the vibe of the musical layer.</p>
-      <p>Each agent represents a creature or an object in the world, with its own rules and rhythms.</p>
-      <p>What you hear and can follow in the log is the result of their interactions and actions translated in real time into a generated sound.</p>
-      <p>The sky is real: time, weather, temperature and wind come from the place you are in (or one you pick), so no two plots are alike.</p>
-      <p>The plot keeps living while you are away. Creatures have names, grow old, are born and die, and new ones wander in. Come back after a few days and read what happened.</p>
-      <p style="color:var(--ink-dim)">Drag to orbit · wheel to zoom · click a creature to follow it · click the place to move the plot.</p>
+      <p>A small simulated wild place: a verge, a few stones, a dead oak and the creatures that live there.</p>
+      <p>The sky is real. Time, weather and wind come from where you are, or from a place you pick, so no two verges are alike.</p>
+      <p>Every creature has a name and its own rules. What you hear is what they do, turned into sound as it happens.</p>
+      <p>The verge keeps living while you are away. Creatures grow old, are born and die, and new ones wander in.</p>
+      <div class="micro">Drag to orbit · Wheel to zoom · Click a creature to follow · Click the place to move</div>
     </div>
   </div>
 </div>
 
 <div class="ui" id="right">
-  <div class="panel" id="p-log">
-    <h2>events log<span class="chev">⌄</span></h2>
+  <div class="panel glass" id="p-log">
+    <h2><span class="pixel">Observations</span><span style="display:flex;align-items:center;gap:10px"><span class="chip" id="log-count">0</span><span class="chev"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#f5f5f7" d="M0 2h1v1H0zM1 3h1v1H1zM2 4h1v1H2zM3 5h2v1H3zM5 4h1v1H5zM6 3h1v1H6zM7 2h1v1H7z"/></svg></span></span></h2>
     <div class="body">
       <div id="away" hidden>
-        <div class="away-h"><span id="away-title">while you were away</span><button id="away-x" title="dismiss">×</button></div>
+        <div class="h"><svg class="ico" viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#ffb454" d="M3 0h2v1H3zM2 1h4v3H2zM1 4h6v2H1zM0 6h8v1H0zM3 7h2v1H3z"/></svg><span>While you were away</span><button id="away-x" title="dismiss">×</button></div>
+        <div id="away-title"></div>
         <div id="away-list"></div>
       </div>
       <div id="log"></div>
@@ -197,10 +251,10 @@
 
 <div class="ui" id="bottom">
   <div id="rec">
-    <div class="btn" id="recbtn"><b></b><span id="reclabel">record</span></div>
-    <canvas id="wave" width="340" height="44"></canvas>
-    <span class="time" id="rectime">0:00</span>
-    <a id="dl" href="#" download="plot-ecosystem.webm">save ↓</a>
+    <div class="btn" id="recbtn"><b></b><span id="reclabel">Record</span></div>
+    <canvas id="wave" width="400" height="36"></canvas>
+    <span class="time mono" id="rectime">0:00</span>
+    <a id="dl" href="#" download="verge.webm">Save</a>
   </div>
 </div>
 
