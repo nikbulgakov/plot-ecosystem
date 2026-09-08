@@ -84,8 +84,9 @@
     const dx = tgt.x - a.pos.x, dz = tgt.z - a.pos.z, d = Math.hypot(dx, dz);
     if (d < 0.08) { a.vel = 0; return true; }
     const s = Math.min(d, speed * dt);
-    a.pos.x += dx / d * s + Math.sin(st.hour * 40 + a.pos.z) * 0.002;
-    a.pos.z += dz / d * s;
+    const [ux, uz] = FLIES[a.species] ? [dx / d, dz / d] : steer(a, dx / d, dz / d);
+    a.pos.x += ux * s + Math.sin(st.hour * 40 + a.pos.z) * 0.002;
+    a.pos.z += uz * s;
     a.vel = speed;
     const r = Math.hypot(a.pos.x, a.pos.z), maxR = W.R * 0.9;
     if (r > maxR) { a.pos.x *= maxR / r; a.pos.z *= maxR / r; }
@@ -94,7 +95,26 @@
   }
 
   /* ---------- collisions: nobody walks through a stone, a trunk or each other ---------- */
-  const RADIUS = { badger: 0.7, toad: 0.42, vole: 0.3, beetle: 0.25, moth: 0.3, wren: 0.32, nuthatch: 0.3, slug: 0.3 };
+  const RADIUS = { badger: 0.9, toad: 0.5, vole: 0.4, beetle: 0.32, moth: 0.35, wren: 0.4, nuthatch: 0.35, slug: 0.35 };
+  // look a little ahead; if a stone is in the way, walk along its edge, keeping to one side until the way is clear
+  function steer(a, dirx, dirz) {
+    const r = RADIUS[a.species] || 0.3, look = r + 0.5;
+    const px = a.pos.x + dirx * look, pz = a.pos.z + dirz * look;
+    let best = null, bestD = Infinity;
+    for (const o of W.obstacles) {
+      if (o.tree && a.species === 'nuthatch') continue;
+      const [cx, cz] = nearestOn(o, px, pz);
+      const d = Math.hypot(px - cx, pz - cz) - (o.r + r);
+      if (d < 0 && d < bestD) { bestD = d; best = nearestOn(o, a.pos.x, a.pos.z); }
+    }
+    if (!best) { a.side = 0; return [dirx, dirz]; }
+    const nx = a.pos.x - best[0], nz = a.pos.z - best[1], nl = Math.hypot(nx, nz) || 1;
+    const ux = nx / nl, uz = nz / nl, tx = -uz, tz = ux;
+    if (!a.side) a.side = Math.sign(dirx * tx + dirz * tz) || 1;
+    let sx = tx * a.side + ux * 0.4, sz = tz * a.side + uz * 0.4;
+    const sl = Math.hypot(sx, sz) || 1;
+    return [sx / sl, sz / sl];
+  }
   const FLIES = { moth: true };
   function nearestOn(o, px, pz) { // closest point of an obstacle to (px, pz)
     if (!o.seg) return [o.x, o.z];
@@ -124,7 +144,8 @@
       a.pos.x = cx + nx * R; a.pos.z = cz + nz * R;
       if (a.target && step > 0) {
         const tx = a.target.x - a.pos.x, tz = a.target.z - a.pos.z;
-        const side = Math.sign(tx * -nz + tz * nx) || 1;
+        const side = a.side || Math.sign(tx * -nz + tz * nx) || 1;
+        a.side = side;
         a.pos.x += -nz * side * step; a.pos.z += nx * side * step;
       }
     }
@@ -245,8 +266,12 @@
     const grow = clamp(0.5 + 0.5 * age / (life * 0.12), 0.5, 1);
     const old = age > life * 0.85 ? 0.6 : 1;
     if (a.state === 'wander' && a.target) {
+      if (a.target !== a.lastTarget) { a.lastTarget = a.target; a.bestD = Infinity; a.stuckT = 0; a.side = 0; }
       const done = moveTo(a, dt, a.target, a.speed * old * (st.weather === 'rain' && a.y < 0.4 ? 0.7 : 1));
-      if (done || a.t < -5) { a.state = 'rest'; a.t = rnd(0.5, 2); } // a target behind a stone is given up on after a while
+      const dNow = dist(a.pos, a.target);
+      if (dNow < a.bestD - 0.01) { a.bestD = dNow; a.stuckT = 0; } else a.stuckT += dt;
+      // no progress for a while means the way is shut: drop the target instead of grinding against the stone
+      if (done || a.stuckT > 1.5 || a.t < -8) { a.state = 'rest'; a.t = rnd(0.5, 2); a.side = 0; }
     } else if (a.state === 'flee') {
       const th = a.threat;
       if (th) { const away = { x: a.pos.x + (a.pos.x - th.pos.x) * 3, z: a.pos.z + (a.pos.z - th.pos.z) * 3 }; moveTo(a, dt, away, a.speed * 2.2); }

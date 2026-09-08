@@ -345,18 +345,18 @@
   W.addCreature = function (spec) {
     const def = SHAPES3D[spec.sprite] || SHAPES3D.beetle;
     const g = new THREE.Group();
-    const thick = 0.06;
+    const thick = 0.075;
     const w = def.ring ? ringWire(def.ring, 14, def.color, thick) : wire(def.shape(), def.color, thick);
     g.add(w.group);
     const coreMat = new THREE.MeshBasicMaterial({ color: def.core, toneMapped: false, transparent: true, opacity: 1 });
     const core = new THREE.Mesh(new THREE.SphereGeometry(def.coreR, 8, 6), coreMat);
     g.add(core);
     // halo: an additive glow in the wire colour that breathes
-    const haloMat = new THREE.SpriteMaterial({ map: getHaloTex(), color: def.color, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-    const halo = new THREE.Sprite(haloMat); halo.scale.setScalar(def.halo); g.add(halo);
+    const haloMat = new THREE.SpriteMaterial({ map: getHaloTex(), color: def.color, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+    const halo = new THREE.Sprite(haloMat); halo.scale.setScalar(def.halo * 1.25); g.add(halo);
     const hit = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 6), new THREE.MeshBasicMaterial({ visible: false }));
     g.add(hit);
-    g.scale.setScalar(spec.size || 1);
+    g.scale.setScalar((spec.size || 1) * 1.3);
     scene.add(g);
     // tracer: a ring of dots that fade out over a few seconds
     const tp = new Float32Array(TRAIL_N * 3), tcol = new Float32Array(TRAIL_N * 3), tborn = new Float32Array(TRAIL_N).fill(-1e9);
@@ -364,7 +364,7 @@
     tg.setAttribute('position', new THREE.BufferAttribute(tp, 3)); tg.setAttribute('color', new THREE.BufferAttribute(tcol, 3));
     const trail = new THREE.Points(tg, new THREE.PointsMaterial({ size: 4, sizeAttenuation: false, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
     trail.frustumCulled = false; scene.add(trail);
-    const c = { spec, group: g, wire: w.group, wireMat: w.mat, core, coreMat, coreColor: new THREE.Color(def.core), halo, haloMat, hit, def, size: spec.size || 1, restT: 0, bob: Math.random() * 6, tilt: Math.random() * 6,
+    const c = { spec, group: g, wire: w.group, wireMat: w.mat, core, coreMat, coreColor: new THREE.Color(def.core), halo, haloMat, hit, def, size: (spec.size || 1) * 1.3, restT: 0, bob: Math.random() * 6, tilt: Math.random() * 6,
       trail, tp, tcol, tborn, tn: 0, trailColor: new THREE.Color(def.core), lastTrail: new THREE.Vector3(1e9, 0, 0) };
     hit.userData.creature = c;
     creatures.push(c);
@@ -421,8 +421,8 @@
     const breath = 0.5 + 0.5 * Math.sin(t * (state === 'flee' || state === 'alert' ? 6 : 2.1) + c.bob);
     c.wireMat.opacity = asleep ? 0.45 : 0.82 + 0.18 * breath;
     c.coreMat.opacity = asleep ? 0.75 : 1;
-    c.haloMat.opacity = asleep ? 0.08 : 0.16 + 0.26 * breath;
-    c.halo.scale.setScalar(d.halo * (0.9 + 0.2 * breath));
+    c.haloMat.opacity = asleep ? 0.15 : 0.38 + 0.32 * breath;
+    c.halo.scale.setScalar(d.halo * 1.25 * (0.9 + 0.2 * breath));
     updateTrail(c, t, moving);
   };
 
