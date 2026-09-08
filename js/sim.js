@@ -95,7 +95,60 @@
   }
 
   /* ---------- collisions: nobody walks through a stone, a trunk or each other ---------- */
-  const RADIUS = { badger: 0.9, toad: 0.5, vole: 0.4, beetle: 0.32, moth: 0.35, wren: 0.4, nuthatch: 0.35, slug: 0.35 };
+  const RADIUS = { badger: 0.62, toad: 0.45, vole: 0.36, beetle: 0.3, moth: 0.35, wren: 0.36, nuthatch: 0.35, slug: 0.32 };
+  // a spot right beside a stone (the vole's favourite), outside its edge and reachable
+  function besideStone(a) {
+    const stones = W.obstacles.filter(o => !o.seg && !o.tree);
+    for (let k = 0; k < 10; k++) {
+      const o = pick(stones), ang = rnd(0, 6.28), d = o.r + (RADIUS[a.species] || 0.3) + 0.2;
+      const p = { x: o.x + Math.cos(ang) * d, z: o.z + Math.sin(ang) * d };
+      if (!blocked(a, p.x, p.z) && pathClear(a, a.pos, p)) return p;
+    }
+    return randomNear(a.home, a.home.r, a.species, a.pos);
+  }
+  // is the straight line from here to there free of stones for this creature?
+  function pathClear(a, from, to) {
+    const d = Math.hypot(to.x - from.x, to.z - from.z), n = Math.max(1, Math.ceil(d / 0.3));
+    for (let i = 1; i <= n; i++) {
+      const k = i / n;
+      if (blocked(a, from.x + (to.x - from.x) * k, from.z + (to.z - from.z) * k)) return false;
+    }
+    return true;
+  }
+  // how much room there is at a point: distance to the nearest obstacle edge (negative inside)
+  function clearance(a, px, pz) {
+    const r = RADIUS[a.species] || 0.3; let best = Infinity;
+    for (const o of W.obstacles) {
+      if (o.tree && a.species === 'nuthatch') continue;
+      const [cx, cz] = nearestOn(o, px, pz);
+      best = Math.min(best, Math.hypot(px - cx, pz - cz) - (o.r + r));
+    }
+    return best;
+  }
+  // a way out of a pocket between stones: the direction with a clear short path, or failing that the roomiest one
+  function escapeTarget(a) {
+    const r = RADIUS[a.species] || 0.3;
+    let nx = 0, nz = 0;
+    for (const o of W.obstacles) {
+      if (o.tree && a.species === 'nuthatch') continue;
+      const [cx, cz] = nearestOn(o, a.pos.x, a.pos.z);
+      const dx = a.pos.x - cx, dz = a.pos.z - cz, d = Math.hypot(dx, dz);
+      if (d < o.r + r + 0.9 && d > 1e-4) { nx += dx / d / d; nz += dz / d / d; }
+    }
+    const ang = (nx || nz) ? Math.atan2(nz, nx) : rnd(0, 6.28);
+    const turns = [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9, 2.5, -2.5, Math.PI];
+    for (const turn of turns) {
+      const p = { x: a.pos.x + Math.cos(ang + turn) * 1.4, z: a.pos.z + Math.sin(ang + turn) * 1.4 };
+      if (Math.hypot(p.x, p.z) < W.R * 0.88 && !blocked(a, p.x, p.z) && pathClear(a, a.pos, p)) return p;
+    }
+    let bestP = null, bestC = -Infinity;
+    for (const turn of turns) {
+      const p = { x: a.pos.x + Math.cos(ang + turn) * 0.7, z: a.pos.z + Math.sin(ang + turn) * 0.7 };
+      const c = clearance(a, p.x, p.z);
+      if (c > bestC) { bestC = c; bestP = p; }
+    }
+    return bestP || { x: a.home.x, z: a.home.z };
+  }
   // look a little ahead; if a stone is in the way, walk along its edge, keeping to one side until the way is clear
   function steer(a, dirx, dirz) {
     const r = RADIUS[a.species] || 0.3, look = r + 0.5;
@@ -161,13 +214,17 @@
       a.pos.x -= nx * push; a.pos.z -= nz * push; b.pos.x += nx * push; b.pos.z += nz * push;
     }
   }
-  function randomNear(home, r, who) {
-    for (let k = 0; k < 8; k++) {
+  // a spot near home with room to stand and, when we know where we start, a straight walk to it
+  function randomNear(home, r, who, from) {
+    const probe = { species: who || 'toad' };
+    for (let k = 0; k < 14; k++) {
       const ang = rnd(0, 6.28), rr = Math.sqrt(Math.random()) * r;
       const p = { x: home.x + Math.cos(ang) * rr, z: home.z + Math.sin(ang) * rr };
-      if (!blocked({ species: who || 'toad' }, p.x, p.z)) return p; // a spot with room to stand
+      if (blocked(probe, p.x, p.z)) continue;
+      if (from && !pathClear(probe, from, p)) continue;
+      return p;
     }
-    return { x: home.x, z: home.z };
+    return from ? escapeTarget(Object.assign({ pos: from, home }, probe)) : { x: home.x, z: home.z };
   }
 
   /* Each species: activity(ctx) 0..1, actions: list of {w(weight fn), dur, run(agent)} */
@@ -187,10 +244,10 @@
       sprite: 'badger', size: 1.0, home: { x: 0, z: 0, r: 6.5 }, y: 0.7, speed: 0.55,
       activity: () => isNight() ? 0.9 : isDusk() ? 0.8 : st.weather === 'after rain' ? 0.5 : 0.2,
       actions: [
-        { w: () => 2, dur: 5, run(a) { a.target = randomNear(a.home, a.home.r); a.state = 'wander'; say(a, pick(['the badger noses forward through the wet grass', 'badger ambles low along the edge of the light', 'the badger follows an old track between the stones', 'badger pauses, lifts its snout, moves on']), { sfx: 'step', degree: 0, octave: -1, vol: 0.09 }); } },
+        { w: () => 2, dur: 5, run(a) { a.target = randomNear(a.home, a.home.r, a.species, a.pos); a.state = 'wander'; say(a, pick(['the badger noses forward through the wet grass', 'badger ambles low along the edge of the light', 'the badger follows an old track between the stones', 'badger pauses, lifts its snout, moves on']), { sfx: 'step', degree: 0, octave: -1, vol: 0.09 }); } },
         { w: () => (isWet() ? 2 : 1), dur: 3, run(a) { a.state = 'act'; say(a, pick(['badger claws scraping wet bark nervously', 'the badger rakes at the base of the oak', 'badger scrapes the soft ground under the fallen branch']), { sfx: 'scrape', degree: 1, octave: -1, kind: 'hot' }); } },
         { w: () => (isWet() ? 1.5 : 0.6), dur: 4, run(a) { a.state = 'act'; say(a, pick(['the badger digs for worms brought up by the rain', 'badger snuffles and digs, throwing soil', 'a shallow scrape opens under the badger\'s claws']), { sfx: 'scrape', degree: 2, octave: -1 }); } },
-        { w: () => (isNight() || isDusk() ? 1 : 0.3), dur: 4, run(a) { a.target = { x: SETT.x, z: SETT.z }; a.state = 'wander'; say(a, pick(['the badger heads for the sett under the fallen branch', 'badger turns for home along the branch line']), { degree: 0, octave: -1 }); } },
+        { w: () => (isNight() || isDusk() ? 1 : 0.3), dur: 4, run(a) { a.target = randomNear(SETT, 1.0, 'badger', a.pos); a.state = 'wander'; say(a, pick(['the badger heads for the sett under the fallen branch', 'badger turns for home along the branch line']), { degree: 0, octave: -1 }); } },
         { w: () => 0.5, dur: 8, run(a) { a.state = 'rest'; a.t = 8; say(a, pick(['the badger settles heavily and listens', 'badger rests, breathing slow in the grass']), { pluck: false }); } },
       ],
     },
@@ -199,7 +256,7 @@
       activity: () => isWet() ? 0.9 : isNight() ? 0.7 : 0.25,
       actions: [
         { w: () => (isWet() || isNight() ? 2.5 : 0.7), dur: 3, run(a) { a.state = 'act'; say(a, pick(['deep rhythmic toad croaking by stream', 'a single toad answers the stream from the reeds', 'toad croaks twice, then the rain again', 'low toad pulse under the sound of water']), { sfx: 'croak', repeat: Math.random() < 0.5, degree: 0, octave: -1, kind: 'hot' }); } },
-        { w: () => 1, dur: 2, run(a) { a.target = randomNear(a.home, a.home.r); a.state = 'wander'; say(a, pick(['the toad hops once toward the wet edge', 'toad drags itself over a fallen stem', 'the toad moves a few slow hops closer to the ravine']), { sfx: 'step', degree: 2, octave: -1, pluckP: 0.3 }); } },
+        { w: () => 1, dur: 2, run(a) { a.target = randomNear(a.home, a.home.r, a.species, a.pos); a.state = 'wander'; say(a, pick(['the toad hops once toward the wet edge', 'toad drags itself over a fallen stem', 'the toad moves a few slow hops closer to the ravine']), { sfx: 'step', degree: 2, octave: -1, pluckP: 0.3 }); } },
         { w: () => 0.8, dur: 7, run(a) { a.state = 'rest'; a.t = 7; say(a, pick(['the toad sits, throat pulsing, eyes half shut', 'toad goes motionless in the dripping grass']), { pluck: false }); } },
       ],
     },
@@ -207,7 +264,7 @@
       sprite: 'vole', size: 0.75, home: { x: 1.2, z: 0.6, r: 3.2 }, y: 0.5, speed: 1.4,
       activity: () => 0.75,
       actions: [
-        { w: () => 3, dur: 1.5, run(a) { const r = pick(ROCKS); a.target = { x: r[0] + rnd(-0.5, 0.5), z: r[1] + rnd(-0.5, 0.5) }; a.state = 'wander'; say(a, pick(['the vole darts between two stones', 'a vole runs the tunnel of bent grass', 'vole nips a seed head and drags it under a rock', 'the vole freezes, then flickers to the next stone']), { sfx: 'rustle', degree: 7, octave: 1, pluckP: 0.4, vol: 0.07 }); } },
+        { w: () => 3, dur: 1.5, run(a) { a.target = besideStone(a); a.state = 'wander'; say(a, pick(['the vole darts between two stones', 'a vole runs the tunnel of bent grass', 'vole nips a seed head and drags it under a rock', 'the vole freezes, then flickers to the next stone']), { sfx: 'rustle', degree: 7, octave: 1, pluckP: 0.4, vol: 0.07 }); } },
         { w: () => 1, dur: 4, run(a) { a.state = 'act'; say(a, pick(['vole gnaws at a stalk, small dry clicks', 'the vole eats quickly, facing outward']), { pluckP: 0.2 }); } },
         { w: () => 0.6, dur: 5, run(a) { a.state = 'rest'; a.t = 5; say(a, pick(['the vole disappears under the largest rock', 'vole hides, only the grass tip trembles']), { pluck: false }); } },
       ],
@@ -216,7 +273,7 @@
       sprite: 'beetle', size: 0.65, home: { x: -0.5, z: 2.5, r: 4 }, y: 0.5, speed: 0.4,
       activity: () => st.weather === 'rain' ? 0.2 : 0.7,
       actions: [
-        { w: () => 3, dur: 3, run(a) { a.target = randomNear(a.home, a.home.r); a.state = 'wander'; say(a, pick(['a ground beetle crosses the bare patch', 'beetle climbs a stalk and drops off again', 'the beetle pushes through a tangle of stems', 'beetle circles a puddle rim, testing the edge']), { degree: 5, octave: 1, pluckP: 0.35, vol: 0.06 }); } },
+        { w: () => 3, dur: 3, run(a) { a.target = randomNear(a.home, a.home.r, a.species, a.pos); a.state = 'wander'; say(a, pick(['a ground beetle crosses the bare patch', 'beetle climbs a stalk and drops off again', 'the beetle pushes through a tangle of stems', 'beetle circles a puddle rim, testing the edge']), { degree: 5, octave: 1, pluckP: 0.35, vol: 0.06 }); } },
         { w: () => 0.8, dur: 6, run(a) { a.state = 'rest'; a.t = 6; say(a, pick(['the beetle tucks itself under a leaf', 'beetle stalls, antennae ticking']), { pluck: false }); } },
       ],
     },
@@ -224,7 +281,7 @@
       sprite: 'moth', size: 0.7, home: { x: 2, z: -1.5, r: 5 }, y: 1.3, speed: 0.9,
       activity: () => (isNight() || isDusk()) && st.weather !== 'rain' ? 0.9 : 0.05,
       actions: [
-        { w: () => 3, dur: 2, run(a) { a.target = randomNear(a.home, a.home.r); a.y = rnd(0.9, 1.7); a.state = 'wander'; say(a, pick(['a moth loops through ' + lightWord(), 'the moth flutters from flower head to flower head', 'moth circles nothing in particular above the grass', 'a pale moth blunders against a seed stalk']), { sfx: 'flutter', degree: 8, octave: 1, pluckP: 0.4, vol: 0.06 }); } },
+        { w: () => 3, dur: 2, run(a) { a.target = randomNear(a.home, a.home.r, a.species, a.pos); a.y = rnd(0.9, 1.7); a.state = 'wander'; say(a, pick(['a moth loops through ' + lightWord(), 'the moth flutters from flower head to flower head', 'moth circles nothing in particular above the grass', 'a pale moth blunders against a seed stalk']), { sfx: 'flutter', degree: 8, octave: 1, pluckP: 0.4, vol: 0.06 }); } },
         { w: () => 0.7, dur: 8, run(a) { a.state = 'rest'; a.t = 8; a.y = 0.7; say(a, pick(['the moth settles under a wide leaf', 'moth rests, wings closed, colourless']), { pluck: false }); } },
       ],
     },
@@ -232,7 +289,7 @@
       sprite: 'wren', size: 0.8, home: { x: 4.5, z: -3.5, r: 3 }, y: 0.9, speed: 1.1,
       activity: () => isNight() ? 0.05 : isDawn() || st.weather === 'clear' ? 0.9 : 0.5,
       actions: [
-        { w: () => 2, dur: 2, run(a) { a.target = randomNear(a.home, a.home.r); a.y = rnd(0.7, 1.3); a.state = 'wander'; say(a, pick(['the wren hops along the fallen branch', 'wren flits low through the stalks, tail cocked', 'the wren picks something from the rotting wood']), { sfx: Math.random() < 0.3 ? 'flutter' : null, degree: 6, octave: 1, pluckP: 0.4, vol: 0.07 }); } },
+        { w: () => 2, dur: 2, run(a) { a.target = randomNear(a.home, a.home.r, a.species, a.pos); a.y = rnd(0.7, 1.3); a.state = 'wander'; say(a, pick(['the wren hops along the fallen branch', 'wren flits low through the stalks, tail cocked', 'the wren picks something from the rotting wood']), { sfx: Math.random() < 0.3 ? 'flutter' : null, degree: 6, octave: 1, pluckP: 0.4, vol: 0.07 }); } },
         { w: () => (isDawn() || st.weather === 'clear' ? 2 : 0.7), dur: 2.5, run(a) { a.state = 'act'; say(a, pick(['wren bursts into a loud, rattling song', 'a quick wren trill from the branch pile', 'the wren sings, far too loud for its size']), { sfx: 'chirp', degree: 8, octave: 1, kind: 'hot' }); } },
         { w: () => 0.6, dur: 6, run(a) { a.state = 'rest'; a.t = 6; say(a, pick(['the wren vanishes into the branch pile', 'wren goes quiet in the dead wood']), { pluck: false }); } },
       ],
@@ -241,7 +298,7 @@
       sprite: 'slug', size: 0.65, home: { x: -3.5, z: 1, r: 2.5 }, y: 0.45, speed: 0.12,
       activity: () => isWet() ? 0.9 : isNight() ? 0.5 : 0.08,
       actions: [
-        { w: () => 2, dur: 8, run(a) { a.target = randomNear(a.home, a.home.r); a.state = 'wander'; say(a, pick(['a slug glides out across the wet stone', 'the slug leaves a slow line up the fallen branch', 'slug stretches toward a soft fallen leaf']), { degree: 3, octave: -1, pluckP: 0.3, vol: 0.06 }); } },
+        { w: () => 2, dur: 8, run(a) { a.target = randomNear(a.home, a.home.r, a.species, a.pos); a.state = 'wander'; say(a, pick(['a slug glides out across the wet stone', 'the slug leaves a slow line up the fallen branch', 'slug stretches toward a soft fallen leaf']), { degree: 3, octave: -1, pluckP: 0.3, vol: 0.06 }); } },
         { w: () => 0.6, dur: 12, run(a) { a.state = 'rest'; a.t = 12; say(a, 'the slug stops and contracts, glistening', { pluck: false }); } },
       ],
     },
@@ -270,8 +327,13 @@
       const done = moveTo(a, dt, a.target, a.speed * old * (st.weather === 'rain' && a.y < 0.4 ? 0.7 : 1));
       const dNow = dist(a.pos, a.target);
       if (dNow < a.bestD - 0.01) { a.bestD = dNow; a.stuckT = 0; } else a.stuckT += dt;
-      // no progress for a while means the way is shut: drop the target instead of grinding against the stone
-      if (done || a.stuckT > 1.5 || a.t < -8) { a.state = 'rest'; a.t = rnd(0.5, 2); a.side = 0; }
+      // no progress for a while means the way is shut: back out into the open first, then rest and think again
+      if (done || a.t < -8) { a.state = 'rest'; a.t = rnd(0.5, 2); a.side = 0; a.escaping = false; }
+      else if (a.stuckT > 1.2) {
+        if (a.escaping) { a.state = 'rest'; a.t = rnd(0.5, 1.5); a.side = 0; a.escaping = false; }
+        else { a.target = escapeTarget(a); a.escaping = true; a.t = 3; a.side = 0; }
+      }
+      if (done && a.escaping) a.escaping = false;
     } else if (a.state === 'flee') {
       const th = a.threat;
       if (th) { const away = { x: a.pos.x + (a.pos.x - th.pos.x) * 3, z: a.pos.z + (a.pos.z - th.pos.z) * 3 }; moveTo(a, dt, away, a.speed * 2.2); }

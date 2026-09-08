@@ -502,7 +502,7 @@
     W.setGrassPalette(paletteName);
     scene.add(makeFlowers(650));
     const rocks = [[1.25, 0.5, -0.4], [0.8, -1.6, 0.6], [0.6, 1.9, 1.8], [0.7, -2.4, -3.1], [0.45, 3.4, -0.6], [0.4, -0.4, 2.9], [0.35, 2.6, 3.4]];
-    rocks.forEach(([s, x, z]) => { scene.add(makeRock(s, x, z)); W.obstacles.push({ x, z, r: s * 1.05 }); });
+    rocks.forEach(([s, x, z]) => { scene.add(makeRock(s, x, z)); W.obstacles.push({ x, z, r: s * 0.98 }); });
     W.oak = makeSnag(-2.1, -2.3, 1.7, false); scene.add(W.oak);
     scene.add(makeSnag(5.2, 1.4, 1.3, true));
     scene.add(makeSnag(-5.4, 2.6, 0.9, true));
