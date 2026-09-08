@@ -6,7 +6,8 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   let W, A, emit;
   const agents = [];
-  const st = { minutes: 14 * 60 + 55, hour: 14.9, weather: 'after rain', weatherT: 0, temp: 12, activity: 0, tension: 0, wind: 0.15, rainAmount: 0.12, mood: 'forest' };
+  const st = { minutes: 14 * 60 + 55, hour: 14.9, weather: 'after rain', weatherT: 0, temp: 12, activity: 0, tension: 0, wind: 0.15, rainAmount: 0.12, mood: 'forest',
+    live: false, place: null, sunrise: 6.2, sunset: 19.5, utcOffset: null, liveTemp: null, liveWind: null, storm: false };
   S.state = st;
   const timers = {};
 
@@ -15,10 +16,14 @@
   const ROCKS = [[0.5, -0.4], [-1.6, 0.6], [1.9, 1.8], [-2.4, -3.1], [3.4, -0.6], [-0.4, 2.9]];
   const SETT = { x: -5.4, z: 2.6 };
 
-  const isNight = () => st.hour < 5.5 || st.hour > 21;
-  const isDusk = () => st.hour > 18.5 && st.hour <= 21;
-  const isDawn = () => st.hour >= 5.5 && st.hour < 8;
+  // day shape follows the real sunrise/sunset when live, defaults otherwise
+  const isNight = () => st.hour < st.sunrise - 0.6 || st.hour > st.sunset + 1.2;
+  const isDusk = () => st.hour > st.sunset - 1.2 && st.hour <= st.sunset + 1.2;
+  const isDawn = () => st.hour >= st.sunrise - 0.6 && st.hour < st.sunrise + 1.6;
   const isWet = () => ['rain', 'drizzle', 'after rain'].includes(st.weather);
+  const smooth = v => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
+  S.daylight = () => smooth((st.hour - st.sunrise + 0.4) / 1.6) * smooth((st.sunset + 0.4 - st.hour) / 1.6);
+  S.twilight = () => Math.exp(-Math.pow((st.hour - st.sunset) / 0.9, 2)) + Math.exp(-Math.pow((st.hour - st.sunrise) / 0.9, 2));
   const lightWord = () => isNight() ? 'the dark' : isDusk() ? 'the failing light' : isDawn() ? 'the grey early light' : st.weather === 'fog' ? 'the fog' : isWet() ? 'the wet light' : 'the afternoon light';
 
   /* ---------- helpers ---------- */
@@ -136,7 +141,8 @@
 
   /* ---------- agent thinking ---------- */
   function think(a) {
-    const act = SPECIES[a.species].activity();
+    let act = SPECIES[a.species].activity();
+    if (st.weather === 'snow') act *= a.species === 'badger' ? 0.7 : 0.35;
     if (Math.random() > act) { a.state = 'rest'; a.t = rnd(1.5, 4); return; }
     const opts = SPECIES[a.species].actions;
     let total = 0; const ws = opts.map(o => { const w = o.w(); total += w; return w; });
@@ -214,14 +220,14 @@
       say(null, pick(['a gust combs the grass flat toward the ravine', 'wind pushes through the dead crown, dry ticking', 'the whole plot leans and rights itself']), { sfx: 'rustle', degree: 5, octave: 0, pluckP: 0.3 });
     }
     // thunder
-    if (st.weather === 'rain' && (timers.thunder || 0) <= 0) {
-      timers.thunder = rnd(40, 120);
-      if (Math.random() < 0.5) { say(null, pick(['thunder, low and far behind the ravine', 'a long roll of thunder crosses the plot']), { sfx: 'thunder', kind: 'alarm', pluck: false }); st.tension = Math.min(1, st.tension + 0.25); for (const a of agents) if (a.state !== 'rest') { a.state = 'alert'; a.t = rnd(1, 3); } }
+    if ((st.weather === 'rain' || st.storm) && (timers.thunder || 0) <= 0) {
+      timers.thunder = st.storm ? rnd(15, 45) : rnd(40, 120);
+      if (Math.random() < (st.storm ? 0.9 : 0.5)) { say(null, pick(['thunder, low and far behind the ravine', 'a long roll of thunder crosses the plot']), { sfx: 'thunder', kind: 'alarm', pluck: false }); st.tension = Math.min(1, st.tension + 0.25); for (const a of agents) if (a.state !== 'rest') { a.state = 'alert'; a.t = rnd(1, 3); } }
     }
     // light remarks
     if ((timers.light || 0) <= 0) {
       timers.light = rnd(60, 110);
-      const t = isNight() ? pick(['the plot is a dark bowl, only sound now', 'stars between the branches, nothing moves for a while']) : isDusk() ? pick(['the light fails along the west edge of the plot', 'colour drains out of the flower heads']) : isDawn() ? pick(['grey light finds the top of the oak first', 'mist lifting off the grass in threads']) : st.weather === 'fog' ? 'fog sits in the bowl of the plot, sound carries oddly' : pick(['a shaft of light picks out the pink stones', 'the flowers hold still in the warm air']);
+      const t = st.weather === 'snow' ? pick(['snow settles on the pink stones and stays', 'the grass bends under a thin white weight', 'flakes drift through the beam without a sound']) : isNight() ? pick(['the plot is a dark bowl, only sound now', 'stars between the branches, nothing moves for a while']) : isDusk() ? pick(['the light fails along the west edge of the plot', 'colour drains out of the flower heads']) : isDawn() ? pick(['grey light finds the top of the oak first', 'mist lifting off the grass in threads']) : st.weather === 'fog' ? 'fog sits in the bowl of the plot, sound carries oddly' : pick(['a shaft of light picks out the pink stones', 'the flowers hold still in the warm air']);
       say(null, t, { pluck: false });
     }
     st.gust = Math.max(0, (st.gust || 0) - dt * 0.4);
@@ -230,15 +236,15 @@
   /* ---------- weather machine ---------- */
   const NEXT = {
     clear: ['overcast', 'wind', 'clear', 'overcast'], overcast: ['drizzle', 'clear', 'fog', 'rain'], drizzle: ['rain', 'after rain', 'drizzle'],
-    rain: ['after rain', 'drizzle', 'rain'], 'after rain': ['clear', 'overcast', 'fog', 'after rain'], fog: ['clear', 'overcast'], wind: ['clear', 'overcast', 'wind'],
+    rain: ['after rain', 'drizzle', 'rain'], 'after rain': ['clear', 'overcast', 'fog', 'after rain'], fog: ['clear', 'overcast'], wind: ['clear', 'overcast', 'wind'], snow: ['overcast', 'snow', 'clear'],
   };
-  const RAIN = { clear: 0, overcast: 0.02, drizzle: 0.35, rain: 1, 'after rain': 0.16, fog: 0.03, wind: 0.04 };
-  const WIND = { clear: 0.12, overcast: 0.2, drizzle: 0.2, rain: 0.35, 'after rain': 0.12, fog: 0.04, wind: 0.75 };
+  const RAIN = { clear: 0, overcast: 0.02, drizzle: 0.35, rain: 1, 'after rain': 0.16, fog: 0.03, wind: 0.04, snow: 0.6 };
+  const WIND = { clear: 0.12, overcast: 0.2, drizzle: 0.2, rain: 0.35, 'after rain': 0.12, fog: 0.04, wind: 0.75, snow: 0.18 };
   function setWeather(w, first) {
     st.weather = w; st.weatherT = rnd(45, 110);
     A.setWeather(w);
     if (!first) {
-      const line = { clear: 'the cloud breaks. sudden light on the wet stones', overcast: 'cloud closes over the plot, colour flattens', drizzle: 'a fine drizzle starts, barely a sound', rain: 'rain arrives properly, hissing in the grass', 'after rain': 'the rain stops. everything drips', fog: 'fog fills the bowl of the plot', wind: 'the wind gets up from the west' }[w];
+      const line = { clear: 'the cloud breaks. sudden light on the wet stones', overcast: 'cloud closes over the plot, colour flattens', drizzle: 'a fine drizzle starts, barely a sound', rain: 'rain arrives properly, hissing in the grass', 'after rain': 'the rain stops. everything drips', fog: 'fog fills the bowl of the plot', wind: 'the wind gets up from the west', snow: 'snow begins, slow and soundless' }[w];
       say(null, line, { kind: 'hot', degree: 0, octave: 1, pluckP: 1, vol: 0.14 });
       st.tension = Math.min(1, st.tension + (w === 'rain' ? 0.2 : w === 'wind' ? 0.15 : 0));
     }
@@ -255,15 +261,40 @@
     setWeather('after rain', true);
   };
 
+  /* live sky: called by the weather module with real conditions for the chosen place */
+  S.applyLive = function (d) {
+    const first = !st.live;
+    st.live = true; st.place = d.place.name; st.utcOffset = d.utcOffset;
+    if (d.sunrise != null && d.sunset != null && d.sunset > d.sunrise) { st.sunrise = d.sunrise; st.sunset = d.sunset; }
+    st.liveTemp = d.temp; st.liveWind = clamp(d.windKmh / 40, 0.05, 0.9); st.storm = !!d.storm;
+    if (first) {
+      st.temp = d.temp;
+      st.minutes = localMinutes(); st.hour = st.minutes / 60;
+      if (d.state !== st.weather) { st.weather = d.state; A.setWeather(d.state); st.rainAmount = RAIN[d.state]; }
+      say(null, `the plot syncs with the sky over ${d.place.name.toLowerCase()}: ${Weather.describe(d)}`, { kind: 'hot', degree: 4, octave: 1, pluckP: 1, vol: 0.14 });
+    } else if (d.state !== st.weather) setWeather(d.state);
+    st.weatherT = 1e9; // real weather never rolls the dice
+  };
+  S.dropLive = function () { st.live = false; st.place = null; st.weatherT = rnd(30, 60); };
+  function localMinutes() {
+    const now = Date.now() + (st.utcOffset || 0) * 1000;
+    return ((now / 60000) % 1440 + 1440) % 1440;
+  }
+
   S.tick = function (dt) {
-    // clock: one simulated minute every 2.4 real seconds
-    st.minutes = (st.minutes + dt / 2.4) % 1440;
+    if (st.live) {
+      st.minutes = localMinutes();
+    } else {
+      // simulated clock: one minute every 2.4 real seconds
+      st.minutes = (st.minutes + dt / 2.4) % 1440;
+    }
     st.hour = st.minutes / 60;
     st.weatherT -= dt;
     if (st.weatherT <= 0) setWeather(pick(NEXT[st.weather]));
     st.rainAmount += (RAIN[st.weather] - st.rainAmount) * dt * 0.15;
-    st.wind += (WIND[st.weather] + (st.gust || 0) * 0.6 - st.wind) * dt * 0.5;
-    const tempTarget = 9 + 7 * Math.max(0, 1 - Math.abs(st.hour - 14) / 8) - (isWet() ? 3 : 0) - (st.weather === 'fog' ? 2 : 0) + (st.weather === 'clear' ? 1.5 : 0);
+    const windBase = st.live ? st.liveWind : WIND[st.weather];
+    st.wind += (windBase + (st.gust || 0) * 0.6 - st.wind) * dt * 0.5;
+    const tempTarget = st.live ? st.liveTemp : 9 + 7 * Math.max(0, 1 - Math.abs(st.hour - 14) / 8) - (isWet() ? 3 : 0) - (st.weather === 'fog' ? 2 : 0) + (st.weather === 'clear' ? 1.5 : 0);
     st.temp += (tempTarget - st.temp) * dt * 0.02;
     for (const a of agents) tickAgent(a, dt);
     interactions();

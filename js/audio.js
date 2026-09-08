@@ -105,6 +105,7 @@
       'after rain': { rain: .015, stream: .14, wind: .02, cut: 1100, chord: [0, 7, 12, 16] },
       fog:       { rain: 0,    stream: .07, wind: .015, cut: 500, chord: [0, 2, 7, 9] },
       wind:      { rain: 0,    stream: .08, wind: .16, cut: 1000, chord: [0, 5, 10, 12] },
+      snow:      { rain: 0,    stream: .04, wind: .06, cut: 450,  chord: [0, 3, 7, 12] },
     };
     const m = map[w] || map.clear;
     rainGain.gain.setTargetAtTime(m.rain, t, k);

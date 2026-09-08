@@ -25,6 +25,7 @@
     $('ui-time').textContent = Sim.clockText();
     $('ui-weather').textContent = s.weather;
     $('ui-temp').textContent = Math.round(s.temp) + '°C';
+    $('ui-wind').textContent = s.live && Weather.last() ? Math.round(Weather.last().windKmh) + ' km/h' : Math.round(s.wind * 40) + ' km/h';
     const act = Math.round(s.activity * 100);
     $('ui-act').style.width = act + '%'; $('ui-act-n').textContent = act + '%';
     $('ui-ten').style.width = Math.round(s.tension * 100) + '%'; $('ui-ten-n').textContent = s.tension.toFixed(2);
@@ -59,7 +60,7 @@
     const dt = World.update();
     Sim.tick(dt);
     const s = Sim.state;
-    World.setAtmosphere({ hour: s.hour, mood: s.mood, rainAmount: s.rainAmount, wind: s.wind });
+    World.setAtmosphere({ hour: s.hour, mood: s.mood, rainAmount: s.rainAmount, wind: s.wind, day: Sim.daylight(), dusk: Sim.twilight(), snow: s.weather === 'snow' });
     updatePanel();
     drawWave();
     drawAvatar(performance.now() / 1000);
@@ -75,8 +76,39 @@
     World.onFollow = c => { if (c) addEvent({ text: 'camera follows the ' + Sim.agents.find(a => a.mesh === c).species, kind: 'normal' }); };
     addEvent({ text: 'the plot wakes up. after rain, ' + Math.round(Sim.state.temp) + '°C', kind: 'hot' });
     loop();
+    connectSky();
   }
   gate.addEventListener('click', start);
+
+  /* ----- real sky ----- */
+  function setPlaceLabel(name, live) {
+    const el = $('ui-place');
+    el.textContent = name;
+    if (live) { const d = document.createElement('i'); d.className = 'live'; el.appendChild(d); }
+  }
+  function connectSky() {
+    setPlaceLabel('looking up…', false);
+    Weather.start({
+      onPlace: p => setPlaceLabel(p.name, false),
+      onData: d => { Sim.applyLive(d); setPlaceLabel(d.place.name, true); },
+      onError: (e, stage) => {
+        if (stage === 'weather') { addEvent({ text: 'no sky data. the plot dreams its own weather', kind: 'alarm' }); setPlaceLabel('simulated', false); }
+        else if (stage === 'geocode') addEvent({ text: 'that place is not on any map here', kind: 'alarm' });
+      },
+    });
+  }
+  $('ui-place').addEventListener('click', async () => {
+    const name = prompt('Move the plot to a place (city name):', Weather.place() ? Weather.place().name.split(',')[0] : '');
+    if (!name || !name.trim()) return;
+    setPlaceLabel('looking up…', false);
+    try {
+      const p = await Weather.setPlace(name.trim());
+      addEvent({ text: 'the plot moves to ' + p.name.toLowerCase(), kind: 'hot' });
+    } catch (e) {
+      addEvent({ text: 'that place is not on any map here', kind: 'alarm' });
+      setPlaceLabel(Weather.place() ? Weather.place().name : 'simulated', Sim.state.live);
+    }
+  });
 
   /* ----- controls ----- */
   $('vol-music').addEventListener('input', e => { AudioEngine.setMusicVolume(e.target.value / 100); $('vol-music-n').textContent = e.target.value + '%'; });

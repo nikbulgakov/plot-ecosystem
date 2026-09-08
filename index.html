@@ -42,6 +42,10 @@
   .row + .row{margin-top:6px}
   .row .k{color:var(--ink-dim);font-size:9px}
   .row .v{color:#e8f5cf}
+  .row .v.place{cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .v.place:hover{color:var(--accent)}
+  .live{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);margin-left:6px;vertical-align:middle;animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.25}}
   .meter{display:flex;align-items:center;gap:8px}
   .meter .bar{flex:1;height:2px;background:rgba(255,255,255,.12);position:relative}
   .meter .bar i{position:absolute;left:0;top:0;height:100%;background:var(--accent);width:0;transition:width .4s}
@@ -145,9 +149,11 @@
   <div class="panel" id="p-eco">
     <h2><svg class="ico" viewBox="0 0 12 12"><path d="M6 1 L9 6 H7.5 L10 10 H2 L4.5 6 H3 Z" fill="#c9e59a"/></svg>plot ecosystem<span class="chev">⌄</span></h2>
     <div class="body">
+      <div class="row"><span class="k">place</span><span class="v place" id="ui-place" title="click to change the place">simulated</span></div>
       <div class="row"><span class="k">time</span><span class="v" id="ui-time">14:55</span></div>
       <div class="row"><span class="k">weather</span><span class="v" id="ui-weather">after rain</span></div>
       <div class="row"><span class="k">temperature</span><span class="v" id="ui-temp">12°C</span></div>
+      <div class="row"><span class="k">wind</span><span class="v" id="ui-wind">—</span></div>
       <div class="row"><span class="k">activity</span><span class="meter"><span class="bar"><i id="ui-act"></i></span><span class="n" id="ui-act-n">0%</span></span></div>
       <div class="row"><span class="k">tension</span><span class="meter"><span class="bar red"><i id="ui-ten"></i></span><span class="n" id="ui-ten-n">0.00</span></span></div>
       <div class="sep"></div>
@@ -162,7 +168,8 @@
       <p>The weather changes over time, influencing the actions of the inhabitants and the vibe of the musical layer.</p>
       <p>Each agent represents a creature or an object in the world, with its own rules and rhythms.</p>
       <p>What you hear and can follow in the log is the result of their interactions and actions translated in real time into a generated sound.</p>
-      <p style="color:var(--ink-dim)">Drag to orbit · wheel to zoom · click a creature to follow it.</p>
+      <p>The sky is real: time, weather, temperature and wind come from the place you are in (or one you pick), so no two plots are alike.</p>
+      <p style="color:var(--ink-dim)">Drag to orbit · wheel to zoom · click a creature to follow it · click the place to move the plot.</p>
     </div>
   </div>
 </div>
@@ -185,6 +192,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/weather.js"></script>
 <script src="js/world.js"></script>
 <script src="js/sim.js"></script>
 <script src="js/main.js"></script>

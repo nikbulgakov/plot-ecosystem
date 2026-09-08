@@ -149,7 +149,7 @@
     return rain;
   }
   function resetDrop(i, randomY) {
-    const x = rnd(-22, 22), z = rnd(-22, 22), y = randomY ? rnd(0, 14) : rnd(12, 15), l = rnd(0.25, 0.6);
+    const x = rnd(-22, 22), z = rnd(-22, 22), y = randomY ? rnd(0, 14) : rnd(12, 15), l = snowMode ? rnd(0.05, 0.1) : rnd(0.25, 0.6);
     rainPos.set([x, y, z, x + 0.03, y + l, z + 0.02], i * 6);
   }
 
@@ -284,11 +284,13 @@
 
   /* ---------- atmosphere ---------- */
   const lightCol = new THREE.Color(), tmpC = new THREE.Color();
+  let snowMode = false;
   W.setAtmosphere = function (a) {
-    // a: {hour, mood, rainAmount, wind, brightness}
+    // a: {hour, mood, rainAmount, wind, brightness, day?, dusk?, snow?}
     const h = a.hour;
-    const day = Math.max(0, Math.min(1, 1 - Math.abs(h - 13) / 7.5)); // 1 at 13:00, 0 before 5:30 / after 20:30
-    const dusk = Math.exp(-Math.pow((h - 19.5) / 1.6, 2)) + Math.exp(-Math.pow((h - 6.2) / 1.4, 2));
+    const day = a.day != null ? a.day : Math.max(0, Math.min(1, 1 - Math.abs(h - 13) / 7.5));
+    const dusk = a.dusk != null ? a.dusk : Math.exp(-Math.pow((h - 19.5) / 1.6, 2)) + Math.exp(-Math.pow((h - 6.2) / 1.4, 2));
+    if (!!a.snow !== snowMode) { snowMode = !!a.snow; rain.material.color.setHex(snowMode ? 0xf4f6ff : 0xcdd8c6); }
     lightCol.setRGB(0.55, 0.62, 0.95).lerp(tmpC.setRGB(1, 0.95, 0.85), day);
     lightCol.lerp(tmpC.setRGB(1, 0.62, 0.32), Math.min(1, dusk) * 0.7);
     if (a.mood === 'dusk') lightCol.lerp(tmpC.setRGB(1, 0.55, 0.25), 0.6);
@@ -312,10 +314,11 @@
     grassMat.uniforms.uTime.value = t;
     // rain
     if (rainCount > 0) {
-      const fall = 9 * dt;
+      const fall = (snowMode ? 1.6 : 9) * dt, drift = snowMode ? Math.sin(t * 0.7) * 0.5 * dt : dt * 0.6;
       for (let i = 0; i < rainCount; i++) {
         const k = i * 6; rainPos[k + 1] -= fall; rainPos[k + 4] -= fall;
-        rainPos[k] += dt * 0.6; rainPos[k + 3] += dt * 0.6;
+        rainPos[k] += drift; rainPos[k + 3] += drift;
+        if (snowMode) { const w = Math.sin(t * 1.3 + i) * 0.3 * dt; rainPos[k + 2] += w; rainPos[k + 5] += w; }
         if (rainPos[k + 1] < 0) resetDrop(i, false);
       }
       rain.geometry.attributes.position.needsUpdate = true;
