@@ -8,6 +8,8 @@
   const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19];
   let moodChord = [0, 7, 12, 16]; // intervals in semitones
   let muted = false;
+  const MASTER = 0.9 * 0.65;      // ceiling: 35% below the original master level
+  const DEFAULT_VOL = 0.35;       // slider default, matches the UI
 
   function st(semi) { return scaleRoot * Math.pow(2, semi / 12); }
   function noiseBuffer(seconds, color) {
@@ -36,15 +38,15 @@
     if (started) return;
     started = true;
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    master = ctx.createGain(); master.gain.value = 0.9;
+    master = ctx.createGain(); master.gain.value = MASTER;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -18; comp.ratio.value = 4; comp.knee.value = 12;
     analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.7;
     recDest = ctx.createMediaStreamDestination();
     master.connect(comp); comp.connect(analyser); analyser.connect(ctx.destination); comp.connect(recDest);
 
-    musicBus = ctx.createGain(); musicBus.gain.value = 0.7; musicBus.connect(master);
-    worldBus = ctx.createGain(); worldBus.gain.value = 0.9; worldBus.connect(master);
+    musicBus = ctx.createGain(); musicBus.gain.value = 0.7 * DEFAULT_VOL; musicBus.connect(master);
+    worldBus = ctx.createGain(); worldBus.gain.value = 0.9 * DEFAULT_VOL; worldBus.connect(master);
 
     // reverb-ish: feedback delay for space
     const dl = ctx.createDelay(1.0); dl.delayTime.value = 0.31;
@@ -123,8 +125,9 @@
 
   A.setMusicVolume = v => { if (musicBus) musicBus.gain.setTargetAtTime(0.7 * v, ctx.currentTime, 0.05); };
   A.setWorldVolume = v => { if (worldBus) worldBus.gain.setTargetAtTime(0.9 * v, ctx.currentTime, 0.05); };
-  A.setMuted = m => { muted = m; if (master) master.gain.setTargetAtTime(m ? 0 : 0.9, ctx.currentTime, 0.05); };
+  A.setMuted = m => { muted = m; if (master) master.gain.setTargetAtTime(m ? 0 : MASTER, ctx.currentTime, 0.05); };
   A.isMuted = () => muted;
+  A.gains = () => master ? { master: master.gain.value, music: musicBus.gain.value, world: worldBus.gain.value } : null;
 
   /* ---------- one-shot world sounds ---------- */
   function env(g, t, a, d, peak) {

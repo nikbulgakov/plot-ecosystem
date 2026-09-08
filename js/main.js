@@ -71,6 +71,8 @@
     if (running) return; running = true;
     gate.classList.add('hide');
     AudioEngine.init(); AudioEngine.resume();
+    AudioEngine.setMusicVolume($('vol-music').value / 100);
+    AudioEngine.setWorldVolume($('vol-world').value / 100);
     World.init($('scene'));
     Sim.init(World, AudioEngine, addEvent);
     World.onFollow = c => { if (c) addEvent({ text: 'camera follows the ' + Sim.agents.find(a => a.mesh === c).species, kind: 'normal' }); };
