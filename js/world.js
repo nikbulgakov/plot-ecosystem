@@ -3,7 +3,7 @@
 (function () {
   const W = {};
   const R = 9.5;                 // plot radius
-  const PIX_TARGET = 420;        // width of the low-res frame in pixels
+  const PIX_TARGET = 640;        // width of the low-res frame in pixels when no pixel size is chosen (≈2 px per pixel)
   let renderer, scene, camera, clock;
   let grassMat, rain, rainPos, rainCount = 0, spot, hemi, fillLight;
   let cam = { theta: 0.6, phi: 0.72, radius: 20, auto: true, target: new THREE.Vector3(0, 0, 0), follow: null };
@@ -292,7 +292,7 @@
       postScene = new THREE.Scene();
       postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       postMat = new THREE.ShaderMaterial({
-        uniforms: { tDiffuse: { value: null }, tBloom: { value: null }, uRes: { value: new THREE.Vector2() }, uLevels: { value: 12 }, uDither: { value: 0.75 }, uBloom: { value: 0.28 } },
+        uniforms: { tDiffuse: { value: null }, tBloom: { value: null }, uRes: { value: new THREE.Vector2() }, uLevels: { value: 12 }, uDither: { value: 0.1 }, uBloom: { value: 0.08 } },
         vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
         fragmentShader: `
           uniform sampler2D tDiffuse, tBloom; uniform vec2 uRes; uniform float uLevels, uDither, uBloom;

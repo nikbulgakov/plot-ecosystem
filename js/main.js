@@ -205,7 +205,7 @@
 
   /* ----- look: pixel size, dither, bloom, grass palette (kept in this browser) ----- */
   const LOOK_KEY = 'plot.look';
-  const look = Object.assign({ pixel: 0, dither: 75, bloom: 35, palette: 'meadow' }, (() => { try { return JSON.parse(localStorage.getItem(LOOK_KEY)) || {}; } catch (e) { return {}; } })());
+  const look = Object.assign({ pixel: 2, dither: 10, bloom: 10, palette: 'meadow' }, (() => { try { return JSON.parse(localStorage.getItem(LOOK_KEY)) || {}; } catch (e) { return {}; } })());
   function saveLook() { try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (e) {} }
   function applyLook() {
     World.setPixelLook({ dither: look.dither / 100, bloom: look.bloom / 100 * 0.8, pixel: look.pixel || undefined, palette: look.palette });
