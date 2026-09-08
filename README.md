@@ -47,4 +47,5 @@ Then open http://localhost:8765 and click to enter (audio needs a user gesture).
 - Drag to orbit, wheel to zoom, click a creature to follow it
 - Sliders: music and world volume
 - Segmented control: dusk / forest / night mood
+- Look panel: pixel size (2–6 px), dither strength, bloom and the grass palette (meadow, moss, straw, arcade), remembered in the browser
 - Hide tucks the interface away, Record captures the audio

@@ -98,6 +98,7 @@
     AudioEngine.setMusicVolume($('vol-music').value / 100);
     AudioEngine.setWorldVolume($('vol-world').value / 100);
     World.init($('scene'));
+    applyLook(); syncLookUI();
     Sim.init(World, AudioEngine, addEvent);
     Life.init({ sim: Sim, world: World, emit: addEvent });
     World.onFollow = c => { if (c) { const a = Sim.agents.find(x => x.mesh === c); addEvent({ text: 'camera follows ' + (a.meta.name ? a.meta.name + ' the ' : 'the ') + a.species, kind: 'normal' }); } };
@@ -194,12 +195,32 @@
   });
 
   /* ----- controls ----- */
-  function slider(id, label, setter) {
+  function setSlider(el, v, label, text) { el.value = v; $(label).textContent = text; el.style.setProperty('--p', ((v - el.min) / (el.max - el.min) * 100) + '%'); }
+  function slider(id, label, setter, fmt) {
     const el = $(id);
-    el.addEventListener('input', e => { const v = e.target.value; setter(v / 100); $(label).textContent = v + '%'; el.style.setProperty('--p', v + '%'); });
+    el.addEventListener('input', e => { const v = +e.target.value; setter(v); setSlider(el, v, label, fmt ? fmt(v) : v + '%'); });
   }
-  slider('vol-music', 'vol-music-n', v => AudioEngine.setMusicVolume(v));
-  slider('vol-world', 'vol-world-n', v => AudioEngine.setWorldVolume(v));
+  slider('vol-music', 'vol-music-n', v => AudioEngine.setMusicVolume(v / 100));
+  slider('vol-world', 'vol-world-n', v => AudioEngine.setWorldVolume(v / 100));
+
+  /* ----- look: pixel size, dither, bloom, grass palette (kept in this browser) ----- */
+  const LOOK_KEY = 'plot.look';
+  const look = Object.assign({ pixel: 0, dither: 75, bloom: 35, palette: 'meadow' }, (() => { try { return JSON.parse(localStorage.getItem(LOOK_KEY)) || {}; } catch (e) { return {}; } })());
+  function saveLook() { try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (e) {} }
+  function applyLook() {
+    World.setPixelLook({ dither: look.dither / 100, bloom: look.bloom / 100 * 0.8, pixel: look.pixel || undefined, palette: look.palette });
+    document.querySelectorAll('#lk-palette [data-palette]').forEach(b => b.classList.toggle('on', b.dataset.palette === look.palette));
+  }
+  function syncLookUI() {
+    if (!look.pixel) look.pixel = World.getPixelLook().pixel;
+    setSlider($('lk-pixel'), look.pixel, 'lk-pixel-n', look.pixel + ' px');
+    setSlider($('lk-dither'), look.dither, 'lk-dither-n', look.dither + '%');
+    setSlider($('lk-bloom'), look.bloom, 'lk-bloom-n', look.bloom + '%');
+  }
+  slider('lk-pixel', 'lk-pixel-n', v => { look.pixel = v; applyLook(); saveLook(); }, v => v + ' px');
+  slider('lk-dither', 'lk-dither-n', v => { look.dither = v; applyLook(); saveLook(); });
+  slider('lk-bloom', 'lk-bloom-n', v => { look.bloom = v; applyLook(); saveLook(); });
+  document.querySelectorAll('#lk-palette [data-palette]').forEach(b => b.addEventListener('click', () => { look.palette = b.dataset.palette; applyLook(); saveLook(); }));
   $('mute').addEventListener('click', e => { const m = !AudioEngine.isMuted(); AudioEngine.setMuted(m); e.currentTarget.classList.toggle('off', m); });
   $('loopbtn').addEventListener('click', e => { const v = !World.getAutoOrbit(); World.setAutoOrbit(v); e.currentTarget.classList.toggle('off', !v); });
   document.querySelectorAll('.seg [data-mood]').forEach(d => d.addEventListener('click', () => {

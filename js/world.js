@@ -14,7 +14,30 @@
   const camRight = new THREE.Vector3(1, 0, 0), camDir = new THREE.Vector3();
   const rnd = (a, b) => a + Math.random() * (b - a);
   // post-processing
-  let rt, bloomRT, postScene, postCam, quad, postMat, downMat, lowW, lowH;
+  let rt, bloomRT, postScene, postCam, quad, postMat, downMat, lowW, lowH, pixOverride = 0;
+  let grassMesh, ground;
+
+  /* ---------- grass palettes: hue / saturation / lightness ranges, the odd dry blade, the ground under it ---------- */
+  const PALETTES = {
+    meadow: { hue: [0.24, 0.30], sat: [0.42, 0.67], lig: [0.17, 0.31], dry: [0.14, 0.40, 0.32], dryP: 0.05, ground: 0x0a1608 },
+    moss:   { hue: [0.36, 0.44], sat: [0.32, 0.52], lig: [0.13, 0.25], dry: [0.20, 0.30, 0.26], dryP: 0.04, ground: 0x07130f },
+    straw:  { hue: [0.09, 0.15], sat: [0.45, 0.70], lig: [0.22, 0.36], dry: [0.07, 0.55, 0.42], dryP: 0.10, ground: 0x15100a },
+    arcade: { hue: [0.27, 0.33], sat: [0.80, 1.00], lig: [0.22, 0.38], dry: [0.16, 0.90, 0.50], dryP: 0.06, ground: 0x05170a },
+  };
+  let paletteName = 'meadow';
+  W.setGrassPalette = function (name) {
+    const p = PALETTES[name]; if (!p || !grassMesh) return;
+    paletteName = name;
+    const col = new THREE.Color();
+    for (let i = 0; i < grassMesh.count; i++) {
+      col.setHSL(rnd(p.hue[0], p.hue[1]), rnd(p.sat[0], p.sat[1]), rnd(p.lig[0], p.lig[1]));
+      if (Math.random() < p.dryP) col.setHSL(p.dry[0], p.dry[1], p.dry[2]);
+      grassMesh.setColorAt(i, col);
+    }
+    grassMesh.instanceColor.needsUpdate = true;
+    if (ground) ground.material.color.setHex(p.ground);
+  };
+  W.palettes = () => Object.keys(PALETTES);
 
   /* ---------- grass ---------- */
   function makeGrass(count) {
@@ -57,7 +80,7 @@
       side: THREE.DoubleSide,
     });
     const mesh = new THREE.InstancedMesh(geo, grassMat, count);
-    const col = new THREE.Color();
+    const col = new THREE.Color(0x335522);
     for (let i = 0; i < count; i++) {
       const r = Math.sqrt(Math.random()) * R * 0.98, a = Math.random() * Math.PI * 2;
       tmpP.set(Math.cos(a) * r, 0, Math.sin(a) * r);
@@ -66,12 +89,10 @@
       tmpS.set(s, s * rnd(0.7, 1.5), s);
       tmpM.compose(tmpP, tmpQ, tmpS);
       mesh.setMatrixAt(i, tmpM);
-      const hue = 0.24 + Math.random() * 0.06, sat = 0.42 + Math.random() * 0.25, lig = 0.17 + Math.random() * 0.14;
-      col.setHSL(hue, sat, lig);
-      if (Math.random() < 0.05) col.setHSL(0.14, 0.4, 0.32); // dry blades
-      mesh.setColorAt(i, col);
+      mesh.setColorAt(i, col); // real colours come from the palette
     }
     mesh.frustumCulled = false;
+    grassMesh = mesh;
     return mesh;
   }
 
@@ -260,7 +281,7 @@
   /* ---------- post: low-res + palette + dither + bloom ---------- */
   function setupPost() {
     const w = window.innerWidth, h = window.innerHeight;
-    const pix = Math.max(2, Math.round(w / PIX_TARGET));
+    const pix = pixOverride || Math.max(2, Math.round(w / PIX_TARGET));
     lowW = Math.max(64, Math.round(w / pix)); lowH = Math.max(36, Math.round(h / pix));
     if (rt) { rt.dispose(); bloomRT.dispose(); }
     rt = new THREE.WebGLRenderTarget(lowW, lowH, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true, stencilBuffer: false });
@@ -299,12 +320,15 @@
     postMat.uniforms.uRes.value.set(lowW, lowH);
     downMat.map = rt.texture; downMat.needsUpdate = true;
   }
-  W.setPixelLook = function (o) { // {levels, dither, bloom}
+  W.setPixelLook = function (o) { // {levels, dither, bloom, pixel, palette}
     if (!postMat) return;
     if (o.levels != null) postMat.uniforms.uLevels.value = o.levels;
     if (o.dither != null) postMat.uniforms.uDither.value = o.dither;
     if (o.bloom != null) postMat.uniforms.uBloom.value = o.bloom;
+    if (o.pixel != null && o.pixel !== pixOverride) { pixOverride = o.pixel; setupPost(); }
+    if (o.palette && o.palette !== paletteName) W.setGrassPalette(o.palette);
   };
+  W.getPixelLook = () => postMat ? { levels: postMat.uniforms.uLevels.value, dither: postMat.uniforms.uDither.value, bloom: postMat.uniforms.uBloom.value, pixel: pixOverride || Math.max(2, Math.round(window.innerWidth / PIX_TARGET)), palette: paletteName } : null;
 
   /* ---------- init ---------- */
   W.init = function (canvas) {
@@ -323,10 +347,11 @@
     scene.add(spot); scene.add(spot.target);
     fillLight = new THREE.DirectionalLight(0x6a8cff, 0.15); fillLight.position.set(-6, 4, -8); scene.add(fillLight);
 
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(R * 1.05, 48), new THREE.MeshStandardMaterial({ color: 0x0a1608, roughness: 1 }));
+    ground = new THREE.Mesh(new THREE.CircleGeometry(R * 1.05, 48), new THREE.MeshStandardMaterial({ color: 0x0a1608, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; scene.add(ground);
 
     scene.add(makeGrass(15000));
+    W.setGrassPalette(paletteName);
     scene.add(makeFlowers(650));
     const rocks = [[1.25, 0.5, -0.4], [0.8, -1.6, 0.6], [0.6, 1.9, 1.8], [0.7, -2.4, -3.1], [0.45, 3.4, -0.6], [0.4, -0.4, 2.9], [0.35, 2.6, 3.4]];
     rocks.forEach(([s, x, z]) => scene.add(makeRock(s, x, z)));
