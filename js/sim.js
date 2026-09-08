@@ -89,11 +89,64 @@
     a.vel = speed;
     const r = Math.hypot(a.pos.x, a.pos.z), maxR = W.R * 0.9;
     if (r > maxR) { a.pos.x *= maxR / r; a.pos.z *= maxR / r; }
+    walkAround(a, s);
     return false;
   }
-  function randomNear(home, r) {
-    const ang = rnd(0, 6.28), rr = Math.sqrt(Math.random()) * r;
-    return { x: home.x + Math.cos(ang) * rr, z: home.z + Math.sin(ang) * rr };
+
+  /* ---------- collisions: nobody walks through a stone, a trunk or each other ---------- */
+  const RADIUS = { badger: 0.7, toad: 0.42, vole: 0.3, beetle: 0.25, moth: 0.3, wren: 0.32, nuthatch: 0.3, slug: 0.3 };
+  const FLIES = { moth: true };
+  function nearestOn(o, px, pz) { // closest point of an obstacle to (px, pz)
+    if (!o.seg) return [o.x, o.z];
+    const [x0, z0, x1, z1] = o.seg, vx = x1 - x0, vz = z1 - z0, L = vx * vx + vz * vz;
+    const k = L > 0 ? clamp(((px - x0) * vx + (pz - z0) * vz) / L, 0, 1) : 0;
+    return [x0 + vx * k, z0 + vz * k];
+  }
+  function blocked(a, px, pz) {
+    const r = RADIUS[a.species] || 0.3;
+    for (const o of W.obstacles) {
+      if (o.tree && a.species === 'nuthatch') continue;
+      const [cx, cz] = nearestOn(o, px, pz);
+      if (Math.hypot(px - cx, pz - cz) < o.r + r) return true;
+    }
+    return false;
+  }
+  // push a creature out of any obstacle it overlaps and let it slide along the edge toward its target
+  function walkAround(a, step) {
+    if (FLIES[a.species]) return;
+    const r = RADIUS[a.species] || 0.3;
+    for (const o of W.obstacles) {
+      if (o.tree && a.species === 'nuthatch') continue;
+      const [cx, cz] = nearestOn(o, a.pos.x, a.pos.z);
+      const dx = a.pos.x - cx, dz = a.pos.z - cz, d = Math.hypot(dx, dz), R = o.r + r;
+      if (d >= R) continue;
+      const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0;
+      a.pos.x = cx + nx * R; a.pos.z = cz + nz * R;
+      if (a.target && step > 0) {
+        const tx = a.target.x - a.pos.x, tz = a.target.z - a.pos.z;
+        const side = Math.sign(tx * -nz + tz * nx) || 1;
+        a.pos.x += -nz * side * step; a.pos.z += nx * side * step;
+      }
+    }
+  }
+  function separate() {
+    for (let i = 0; i < agents.length; i++) for (let j = i + 1; j < agents.length; j++) {
+      const a = agents[i], b = agents[j];
+      if (FLIES[a.species] || FLIES[b.species]) continue;
+      if ((a.species === 'nuthatch') !== (b.species === 'nuthatch')) continue; // the climber is on the trunk, above the rest
+      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, d = Math.hypot(dx, dz), R = (RADIUS[a.species] || 0.3) + (RADIUS[b.species] || 0.3);
+      if (d >= R || d < 1e-4) continue;
+      const push = (R - d) / 2, nx = dx / d, nz = dz / d;
+      a.pos.x -= nx * push; a.pos.z -= nz * push; b.pos.x += nx * push; b.pos.z += nz * push;
+    }
+  }
+  function randomNear(home, r, who) {
+    for (let k = 0; k < 8; k++) {
+      const ang = rnd(0, 6.28), rr = Math.sqrt(Math.random()) * r;
+      const p = { x: home.x + Math.cos(ang) * rr, z: home.z + Math.sin(ang) * rr };
+      if (!blocked({ species: who || 'toad' }, p.x, p.z)) return p; // a spot with room to stand
+    }
+    return { x: home.x, z: home.z };
   }
 
   /* Each species: activity(ctx) 0..1, actions: list of {w(weight fn), dur, run(agent)} */
@@ -102,10 +155,10 @@
       sprite: 'nuthatch', size: 0.8, home: { x: OAK.x, z: OAK.z, r: 1.2 }, y: 1.6, speed: 0.5,
       activity: () => isNight() ? 0.05 : st.weather === 'rain' ? 0.35 : 0.8,
       actions: [
-        { w: () => 3, dur: 2, run(a) { a.y = clamp(a.y - rnd(0.15, 0.35), 0.75, 2.3); a.target = randomNear(OAK, 0.6); a.state = 'wander';
+        { w: () => 3, dur: 2, run(a) { a.y = clamp(a.y - rnd(0.15, 0.35), 0.75, 2.3); a.target = randomNear(OAK, 0.6, 'nuthatch'); a.state = 'wander';
             say(a, pick(['the nuthatch moves one slow step down the ' + (isWet() ? 'wet oak' : 'oak'), 'the nuthatch moves again on the ' + (isWet() ? 'wet oak' : 'oak bark'), 'the nuthatch creeps head-first down the trunk', 'nuthatch taps twice at a seam in the bark']), { sfx: Math.random() < 0.4 ? 'step' : null, degree: 6, octave: 1, vol: 0.08 }); } },
         { w: () => (isNight() ? 0 : 1.2), dur: 1.5, run(a) { say(a, pick(['nuthatch calls a thin nasal note over the plot', 'a short chirp from the oak, answered by nothing', 'the nuthatch scolds something unseen in ' + lightWord()]), { sfx: 'chirp', degree: 8, octave: 1, kind: 'hot' }); } },
-        { w: () => (isNight() ? 0 : 0.5), dur: 4, run(a) { a.y = 1.9; a.target = randomNear(OAK, 1.2); a.state = 'wander'; say(a, pick(['the nuthatch climbs back up toward the bare crown', 'nuthatch wedges an acorn into a crack and hammers it']), { sfx: Math.random() < 0.5 ? 'acorn' : null, degree: 4, octave: 1 }); } },
+        { w: () => (isNight() ? 0 : 0.5), dur: 4, run(a) { a.y = 1.9; a.target = randomNear(OAK, 1.2, 'nuthatch'); a.state = 'wander'; say(a, pick(['the nuthatch climbs back up toward the bare crown', 'nuthatch wedges an acorn into a crack and hammers it']), { sfx: Math.random() < 0.5 ? 'acorn' : null, degree: 4, octave: 1 }); } },
         { w: () => 0.6, dur: 6, run(a) { a.state = 'rest'; a.t = 6; say(a, pick(['the nuthatch goes still against the trunk', 'nuthatch fluffs against the cold and waits']), { pluck: false }); } },
       ],
     },
@@ -193,7 +246,7 @@
     const old = age > life * 0.85 ? 0.6 : 1;
     if (a.state === 'wander' && a.target) {
       const done = moveTo(a, dt, a.target, a.speed * old * (st.weather === 'rain' && a.y < 0.4 ? 0.7 : 1));
-      if (done) { a.state = 'rest'; a.t = rnd(0.5, 2); }
+      if (done || a.t < -5) { a.state = 'rest'; a.t = rnd(0.5, 2); } // a target behind a stone is given up on after a while
     } else if (a.state === 'flee') {
       const th = a.threat;
       if (th) { const away = { x: a.pos.x + (a.pos.x - th.pos.x) * 3, z: a.pos.z + (a.pos.z - th.pos.z) * 3 }; moveTo(a, dt, away, a.speed * 2.2); }
@@ -344,6 +397,8 @@
     const snowTarget = st.weather === 'snow' ? 1 : st.temp < 0.5 ? st.snowCover : 0;
     st.snowCover += (snowTarget - st.snowCover) * dt * (snowTarget > st.snowCover ? 0.01 : 0.003);
     for (const a of agents) tickAgent(a, dt);
+    for (const a of agents) walkAround(a, 0);
+    separate();
     interactions();
     environment(dt);
     let moving = 0; for (const a of agents) moving += a.vel > 0 ? Math.min(1, a.vel / 1.2) : 0;

@@ -43,7 +43,7 @@ Then open http://localhost:8765 and click to enter (audio needs a user gesture).
 - `index.html` — layout and UI panels (ecosystem stats, how it works, events log, ticker player, recorder)
 - `js/world.js` — Three.js scene: instanced grass with a wind shader, rocks, dead branches, flowers, rain, creatures and trails, orbit camera
 - `js/weather.js` — Open-Meteo client: geocoding, geolocation fallback, WMO code mapping, refresh
-- `js/sim.js` — clock and weather (live from the sky, or simulated), and agents (nuthatch, badger, toad, voles, beetles, moths, wren, slug) with their own rules
+- `js/sim.js` — clock and weather (live from the sky, or simulated), agents (nuthatch, badger, toad, voles, beetles, moths, wren, slug) with their own rules, and collisions: ground creatures walk around stones, the oak and the fallen branches and never overlap each other (the moth flies over everything, the nuthatch keeps to its trunk)
 - `js/audio.js` — Web Audio: pads that follow the weather, pentatonic plucks on events, rain/stream/wind beds and one-shot foley, recording to webm
 - `js/life.js` — persistence and demography: roster with names and ages, births, deaths, arrivals, flowers, day steps and the catch-up after an absence
 - `js/main.js` — glue, log, ticker, recorder UI, the "while you were away" block

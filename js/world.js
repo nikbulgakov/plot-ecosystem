@@ -9,6 +9,7 @@
   let cam = { theta: 0.6, phi: 0.72, radius: 20, auto: true, target: new THREE.Vector3(0, 0, 0), follow: null };
   let drag = null;
   const creatures = [];
+  W.obstacles = []; // circles {x,z,r} and capsules {seg:[x0,z0,x1,z1], r} that ground creatures walk around
   const raycaster = new THREE.Raycaster();
   const tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3();
   const camRight = new THREE.Vector3(1, 0, 0), camDir = new THREE.Vector3();
@@ -155,6 +156,9 @@
     const dir = lying ? new THREE.Vector3(rnd(-1, 1), 0.25, rnd(-1, 1)).normalize() : new THREE.Vector3(rnd(-0.3, 0.3), 1, rnd(-0.3, 0.3)).normalize();
     branch(g, new THREE.Vector3(0, -0.1, 0), dir, 1.4 * scale, 0.08 * scale, 3);
     g.position.set(x, 0, z);
+    // what creatures must walk around: a lying trunk is a capsule, a standing one a post
+    if (lying) W.obstacles.push({ seg: [x, z, x + dir.x * 1.4 * scale, z + dir.z * 1.4 * scale], r: 0.22 * scale + 0.1 });
+    else W.obstacles.push({ x, z, r: 0.12 * scale + 0.2, tree: true });
     return g;
   }
 
@@ -497,7 +501,7 @@
     W.setGrassPalette(paletteName);
     scene.add(makeFlowers(650));
     const rocks = [[1.25, 0.5, -0.4], [0.8, -1.6, 0.6], [0.6, 1.9, 1.8], [0.7, -2.4, -3.1], [0.45, 3.4, -0.6], [0.4, -0.4, 2.9], [0.35, 2.6, 3.4]];
-    rocks.forEach(([s, x, z]) => scene.add(makeRock(s, x, z)));
+    rocks.forEach(([s, x, z]) => { scene.add(makeRock(s, x, z)); W.obstacles.push({ x, z, r: s * 1.05 }); });
     W.oak = makeSnag(-2.1, -2.3, 1.7, false); scene.add(W.oak);
     scene.add(makeSnag(5.2, 1.4, 1.3, true));
     scene.add(makeSnag(-5.4, 2.6, 0.9, true));
