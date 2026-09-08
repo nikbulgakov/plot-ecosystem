@@ -4,7 +4,7 @@ A small simulated wild place in the browser, drawn like a 16-bit game and dresse
 
 ## Look
 
-- **Scene**: the Three.js world is rendered to a low-resolution target (about 420 px wide), upscaled without smoothing, quantised to 12 levels per channel with a 4×4 ordered dither, and topped with a faint bloom. Creatures are 8×8-ish pixel sprites with a one-pixel outline that flip to face the way they move; they leave no trails.
+- **Scene**: the Three.js world is rendered to a low-resolution target (about 420 px wide), upscaled without smoothing, quantised to 12 levels per channel with a 4×4 ordered dither, and topped with a faint bloom. Creatures are procedural low-poly models in the spirit of Mushishi's mushi: translucent bodies with a luminous fresnel rim, glowing eye spots, trailing threads that sag at rest and stream out at speed, and a dark back-face shell for a one-pixel outline. They turn to face the way they move and carry their own gait (walk, hop, crawl, fly); they leave no trails.
 - **Interface**: dark glass panels with blur and a thin light edge, Geist for text and Geist Mono for numbers, a pixel display face (Pixelify Sans) only for the wordmark and section titles, Silkscreen for micro-labels, pixel icons on an 8×8 grid, block meters, smooth sliders, a segmented mood control, a now-playing "island" and an amber notification card for what happened while you were away. One warm accent, green for live, red for alarm.
 
 ## Real weather
@@ -26,7 +26,7 @@ Then open http://localhost:8765 and click to enter (audio needs a user gesture).
 
 ## Day, night and the year
 
-- Creatures are animated: a two-frame walk (faster when fleeing, a slow shuffle while busy) and a curled sleeping pose after a moment at rest.
+- Creatures are animated procedurally: legs swing, toads and wrens hop, slugs stretch, moths flap and hover; after a moment at rest a creature squashes into sleep and its rim dims, and fear makes the rim flare and the threads snap straight.
 - Seasons follow the calendar at the place (flipped south of the equator): the grass goes to straw in autumn and winter, a warm spell greens it up, and a snow cover builds while it snows, holds in the cold and melts above freezing. Snow persists between visits.
 - At night the sky fills with stars and a moon drawn at its real phase (tilt the camera toward the horizon to see them), moonlight brightens clear nights, fireflies drift over the grass when it is warm and dry, crickets fade in and an owl calls from beyond the ravine.
 

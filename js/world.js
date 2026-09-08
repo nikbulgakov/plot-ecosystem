@@ -1,5 +1,5 @@
 /* Three.js scene drawn like a 16-bit game: rendered to a low-res target, palette-quantised with an ordered dither,
-   a faint bloom on top, creatures as pixel sprites. */
+   a faint bloom on top, creatures as low-poly membranes with a luminous rim and trailing threads. */
 (function () {
   const W = {};
   const R = 9.5;                 // plot radius
@@ -240,7 +240,7 @@
     const fg = new THREE.BufferGeometry();
     fg.setAttribute('position', new THREE.BufferAttribute(fp, 3));
     fg.setAttribute('color', new THREE.BufferAttribute(ffColor, 3));
-    fireflies = new THREE.Points(fg, new THREE.PointsMaterial({ size: 0.3, sizeAttenuation: true, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false }));
+    fireflies = new THREE.Points(fg, new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false }));
     fireflies.frustumCulled = false; fireflies.visible = false; scene.add(fireflies);
   }
   // a 16×16 pixel moon: the lit side follows the phase (waxing lights the right edge)
@@ -282,92 +282,135 @@
     fireflies.geometry.attributes.color.needsUpdate = true;
   }
 
-  /* ---------- creatures: pixel sprites ---------- */
-  // Each species has three frames of the same size: two walk frames and a sleeping pose.
-  const K = '#14121c';
-  const SPRITES = {
-    badger: { pal: { G: '#8a8896', W: '#f4f4f6', K: K }, frames: [
-      ['....GGGGGG..', '..GGGGGGGGG.', '.WKWGGGGGGGG', 'KWKWGGGGGGGG', '.WKWGGGGGGG.', '..GGGGGGGG..', '..K..K.K.K..'],
-      ['....GGGGGG..', '..GGGGGGGGG.', '.WKWGGGGGGGG', 'KWKWGGGGGGGG', '.WKWGGGGGGG.', '..GGGGGGGG..', '.K..K..K..K.'],
-      ['............', '....GGGGG...', '..GGGGGGGGG.', '.WKWGGGGGGGG', 'KWKWGGGGGGGG', '.WKGGGGGGGG.', '..GGGGGGGGG.']] },
-    toad: { pal: { Y: '#d2bc4c', O: K, S: '#8a7a2a' }, frames: [
-      ['..Y...Y..', '.YYYYYYY.', 'YYOYYYOYY', 'YYYYYYYYY', '.YYYYYYY.', 'YY.....YY'],
-      ['..Y...Y..', '.YYYYYYY.', 'YYOYYYOYY', 'YYYYYYYYY', 'YYYYYYYYY', '.Y.....Y.'],
-      ['.........', '..Y...Y..', '.YYYYYYY.', 'YYSYYYSYY', 'YYYYYYYYY', 'YYYYYYYYY']] },
-    vole: { pal: { B: '#a8743f', K: K, P: '#f0a0a0' }, frames: [
-      ['..BBBB.', '.BBBBBK', 'BBBBBBB', 'P.B..B.'],
-      ['..BBBB.', '.BBBBBK', 'BBBBBBB', '.PB.B..'],
-      ['.......', '..BBBB.', '.BBBBBB', 'PBBBBB.']] },
-    beetle: { pal: { K: '#20202c', H: '#7a7a96' }, frames: [
-      ['.KKK.', 'KKHKK', 'KKKKK', 'K.K.K'],
-      ['.KKK.', 'KKHKK', 'KKKKK', '.K.K.'],
-      ['.KKK.', 'KKHKK', 'KKKKK', '.....']] },
-    moth: { pal: { M: '#f0ecf8', P: '#d884b8' }, frames: [
-      ['M.......M', 'MMM...MMM', '.MMMPMMM.', '..MMPMM..', '...M.M...'],
-      ['.........', '..M...M..', '.MMMPMMM.', '..MMPMM..', '...M.M...'],
-      ['.........', '.........', '..MMPMM..', '.MMMPMMM.', '...M.M...']] },
-    wren: { pal: { R: '#b47a4e', B: '#86643f', K: K }, frames: [
-      ['.....B', '.RRR.B', 'RRRRBB', 'RRRRR.', '.K..K.'],
-      ['.RRR..', 'RRRRB.', 'RRRRBB', '.RRR..', '..KK..'],
-      ['......', '.RRR.B', 'RRRRRB', 'RRRRR.', '.RRRR.']] },
-    nuthatch: { pal: { N: '#7a9ac4', W: '#f2ece2', K: K }, frames: [
-      ['.NNNN.', 'NNNNNK', 'NWWWNN', '.NWWN.', '..N.N.'],
-      ['.NNNN.', 'NNNNNK', 'NWWWNN', '.NWWN.', '.N..N.'],
-      ['......', '.NNNN.', 'NNNNNN', 'NWWWN.', '.NWWN.']] },
-    slug: { pal: { T: '#dcb884' }, frames: [
-      ['....TT.', 'TTTTTTT', '.TTTTT.'],
-      ['.....TT', '.TTTTTT', 'TTTTTT.'],
-      ['.......', '..TTT..', '.TTTTT.']] },
+  /* ---------- creatures: low-poly membranes with a luminous rim, glowing eye spots and trailing threads ---------- */
+  const rimVert = `varying vec3 vN, vP; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vP = mv.xyz; vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * mv; }`;
+  const rimFrag = `uniform vec3 uRim, uInner; uniform float uAlpha, uPulse; varying vec3 vN, vP;
+    void main(){
+      vec3 n = normalize(vN); vec3 v = normalize(-vP);
+      float f = pow(1.0 - max(0.0, dot(n, v)), 1.6);
+      float glow = clamp(f * uPulse, 0.0, 1.0);
+      gl_FragColor = vec4(mix(uInner, uRim, glow), mix(uAlpha, 1.0, glow));
+    }`;
+  function membrane(rim, inner, alpha) {
+    return new THREE.ShaderMaterial({ uniforms: { uRim: { value: new THREE.Color(rim) }, uInner: { value: new THREE.Color(inner) }, uAlpha: { value: Math.min(1, alpha + 0.2) }, uPulse: { value: 1.6 } },
+      vertexShader: rimVert, fragmentShader: rimFrag, transparent: true, depthWrite: true, side: THREE.DoubleSide });
+  }
+  const EYE = 0xffcd78;
+  const flat = geo => { const g = geo.toNonIndexed(); g.computeVertexNormals(); return g; };
+  // every body part gets a dark back-face shell: the one-pixel outline that keeps a creature legible on grass
+  const outlineMat = new THREE.MeshBasicMaterial({ color: 0x0a0c12, side: THREE.BackSide, toneMapped: false });
+  function part(geo, mat, x, y, z, sx, sy, sz, rx, ry, rz, noOutline) {
+    const m = new THREE.Mesh(flat(geo), mat);
+    m.position.set(x || 0, y || 0, z || 0); m.scale.set(sx || 1, sy || 1, sz || 1); m.rotation.set(rx || 0, ry || 0, rz || 0);
+    if (!noOutline && mat !== eyeMat && mat !== bandMat) { const o = new THREE.Mesh(m.geometry, outlineMat); o.scale.setScalar(1.14); m.add(o); }
+    return m;
+  }
+  function leg(g, mat, x, y, z, h, r) { // a pivot at the hip so the leg can swing
+    const p = new THREE.Group(); p.position.set(x, y, z);
+    p.add(part(new THREE.CylinderGeometry(r * 0.7, r, h, 5, 1), mat, 0, -h / 2, 0));
+    g.add(p); return p;
+  }
+  function eye(g, x, y, z, r) { const m = part(new THREE.SphereGeometry(r || 0.05, 5, 4), eyeMat, x, y, z); g.add(m); return m; }
+  const eyeMat = new THREE.MeshBasicMaterial({ color: EYE, toneMapped: false });
+  const bandMat = new THREE.MeshBasicMaterial({ color: 0xcdf2ec, transparent: true, opacity: 0.85, toneMapped: false });
+  // a thread: a line of segments from an anchor, sagging and swaying in the creature's own space
+  function thread(g, anchor, dir, len, droop, color) {
+    const segs = 6, pts = new Float32Array((segs + 1) * 3);
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.75, toneMapped: false }));
+    line.frustumCulled = false; g.add(line);
+    return { line, pts, segs, anchor: new THREE.Vector3(anchor[0], anchor[1], anchor[2]), dir: new THREE.Vector3(dir[0], dir[1], dir[2]).normalize(), len, droop, phase: Math.random() * 6, bead: null };
+  }
+  function animThread(th, t, sag, flutter) {
+    const p = th.pts, n = th.segs;
+    for (let i = 0; i <= n; i++) {
+      const k = i / n;
+      p[i * 3] = th.anchor.x + th.dir.x * k * th.len + Math.sin(t * 2.2 + k * 4 + th.phase) * 0.06 * k * flutter;
+      p[i * 3 + 1] = th.anchor.y + th.dir.y * k * th.len - th.droop * sag * k * k * th.len + Math.sin(t * 1.7 + k * 3 + th.phase) * 0.04 * k;
+      p[i * 3 + 2] = th.anchor.z + th.dir.z * k * th.len + Math.cos(t * 1.9 + k * 3.5 + th.phase) * 0.06 * k * flutter;
+    }
+    th.line.geometry.attributes.position.needsUpdate = true;
+    if (th.bead) th.bead.position.set(p[n * 3], p[n * 3 + 1], p[n * 3 + 2]);
+  }
+  // species: rim / inner colours, body translucency, and a builder (forward is +X, feet at y = 0)
+  const SPECIES3D = {
+    badger: { rim: 0x9fe8dd, inner: 0x0f1e22, alpha: 0.55, build(g, m) {
+      const body = part(new THREE.SphereGeometry(0.5, 8, 6), m, 0, 0.36, 0, 1.3, 0.62, 0.8); g.add(body);
+      g.add(part(new THREE.SphereGeometry(0.28, 7, 5), m, 0.66, 0.4, 0, 1.15, 0.8, 0.9));
+      g.add(part(new THREE.BoxGeometry(0.34, 0.05, 0.05), bandMat, 0.72, 0.5, 0.15)); g.add(part(new THREE.BoxGeometry(0.34, 0.05, 0.05), bandMat, 0.72, 0.5, -0.15));
+      eye(g, 0.9, 0.44, 0.13); eye(g, 0.9, 0.44, -0.13);
+      const legs = [leg(g, m, 0.38, 0.28, 0.26, 0.3, 0.07), leg(g, m, 0.38, 0.28, -0.26, 0.3, 0.07), leg(g, m, -0.38, 0.28, 0.26, 0.3, 0.07), leg(g, m, -0.38, 0.28, -0.26, 0.3, 0.07)];
+      const threads = [thread(g, [-0.62, 0.4, 0], [-1, 0.15, 0], 0.75, 0.5, 0x9fe8dd), thread(g, [-0.6, 0.36, 0.12], [-1, 0.05, 0.25], 0.6, 0.5, 0x9fe8dd), thread(g, [-0.6, 0.36, -0.12], [-1, 0.05, -0.25], 0.6, 0.5, 0x9fe8dd)];
+      return { body, legs, threads, gait: 'walk' };
+    } },
+    toad: { rim: 0xa8f0d0, inner: 0x12241c, alpha: 0.55, build(g, m) {
+      const body = part(new THREE.SphereGeometry(0.5, 8, 6), m, 0, 0.26, 0, 0.95, 0.55, 0.85); g.add(body);
+      g.add(part(new THREE.SphereGeometry(0.13, 6, 5), m, 0.28, 0.5, 0.2)); g.add(part(new THREE.SphereGeometry(0.13, 6, 5), m, 0.28, 0.5, -0.2));
+      eye(g, 0.36, 0.55, 0.2, 0.06); eye(g, 0.36, 0.55, -0.2, 0.06);
+      [[0.32, 0.35], [0.32, -0.35], [-0.3, 0.38], [-0.3, -0.38]].forEach(([x, z]) => g.add(part(new THREE.SphereGeometry(0.1, 5, 4), m, x, 0.08, z, 1.3, 0.7, 1)));
+      return { body, legs: [], threads: [], gait: 'hop' };
+    } },
+    vole: { rim: 0xbfe8dd, inner: 0x1a1c22, alpha: 0.5, build(g, m) {
+      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.22, 0, 0.7, 0.42, 0.46); g.add(body);
+      g.add(part(new THREE.SphereGeometry(0.17, 6, 5), m, 0.42, 0.26, 0));
+      g.add(part(new THREE.SphereGeometry(0.06, 5, 4), m, 0.4, 0.42, 0.1)); g.add(part(new THREE.SphereGeometry(0.06, 5, 4), m, 0.4, 0.42, -0.1));
+      eye(g, 0.56, 0.3, 0.08, 0.04); eye(g, 0.56, 0.3, -0.08, 0.04);
+      const legs = [leg(g, m, 0.2, 0.16, 0.14, 0.16, 0.04), leg(g, m, 0.2, 0.16, -0.14, 0.16, 0.04), leg(g, m, -0.2, 0.16, 0.14, 0.16, 0.04), leg(g, m, -0.2, 0.16, -0.14, 0.16, 0.04)];
+      const tail = thread(g, [-0.34, 0.22, 0], [-1, 0.2, 0], 0.6, 0.6, 0xbfe8dd); tail.bead = eye(g, 0, 0, 0, 0.045);
+      return { body, legs, threads: [tail], gait: 'walk' };
+    } },
+    beetle: { rim: 0xb8a6ff, inner: 0x0a0a16, alpha: 0.8, build(g, m) {
+      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.14, 0, 0.5, 0.3, 0.45); g.add(body);
+      g.add(part(new THREE.BoxGeometry(0.4, 0.03, 0.03), bandMat, -0.02, 0.29, 0));
+      const threads = [thread(g, [0.22, 0.2, 0.06], [0.7, 0.9, 0.3], 0.35, 0, 0xb8a6ff), thread(g, [0.22, 0.2, -0.06], [0.7, 0.9, -0.3], 0.35, 0, 0xb8a6ff)];
+      const legs = [leg(g, m, 0.12, 0.1, 0.16, 0.1, 0.025), leg(g, m, 0.12, 0.1, -0.16, 0.1, 0.025), leg(g, m, -0.12, 0.1, 0.16, 0.1, 0.025), leg(g, m, -0.12, 0.1, -0.16, 0.1, 0.025)];
+      return { body, legs, threads, gait: 'walk' };
+    } },
+    moth: { rim: 0xf0ecf8, inner: 0x2a2a3a, alpha: 0.4, build(g, m) {
+      const body = part(new THREE.SphereGeometry(0.5, 6, 5), m, 0, 0.5, 0, 0.5, 0.16, 0.16); g.add(body);
+      eye(g, 0.22, 0.52, 0, 0.05);
+      const wings = [];
+      [1, -1].forEach(s => { const p = new THREE.Group(); p.position.set(0, 0.55, s * 0.05); p.add(part(new THREE.PlaneGeometry(0.5, 0.36), m, 0, 0, s * 0.2, 1, 1, 1, -Math.PI / 2, 0, 0, true)); g.add(p); wings.push(p); });
+      const threads = [thread(g, [0.24, 0.55, 0.03], [0.8, 0.8, 0.2], 0.25, 0, 0xf0ecf8), thread(g, [0.24, 0.55, -0.03], [0.8, 0.8, -0.2], 0.25, 0, 0xf0ecf8)];
+      return { body, legs: [], threads, wings, gait: 'fly' };
+    } },
+    wren: { rim: 0xd8e8c8, inner: 0x1a2018, alpha: 0.5, build(g, m) {
+      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.3, 0, 0.56, 0.44, 0.42); g.add(body);
+      g.add(part(new THREE.SphereGeometry(0.17, 6, 5), m, 0.3, 0.44, 0));
+      g.add(part(new THREE.ConeGeometry(0.05, 0.16, 4), eyeMat, 0.5, 0.42, 0, 1, 1, 1, 0, 0, -Math.PI / 2));
+      eye(g, 0.4, 0.5, 0.09, 0.04); eye(g, 0.4, 0.5, -0.09, 0.04);
+      g.add(part(new THREE.BoxGeometry(0.28, 0.03, 0.12), m, -0.34, 0.42, 0, 1, 1, 1, 0, 0, 0.55));
+      const legs = [leg(g, m, 0.05, 0.14, 0.08, 0.14, 0.02), leg(g, m, 0.05, 0.14, -0.08, 0.14, 0.02)];
+      const threads = [thread(g, [-0.46, 0.5, 0], [-1, 0.3, 0], 0.45, 0.4, 0xd8e8c8), thread(g, [-0.44, 0.48, 0.06], [-1, 0.2, 0.3], 0.4, 0.4, 0xd8e8c8), thread(g, [-0.44, 0.48, -0.06], [-1, 0.2, -0.3], 0.4, 0.4, 0xd8e8c8)];
+      return { body, legs, threads, gait: 'hop' };
+    } },
+    nuthatch: { rim: 0x9fc4ff, inner: 0x101a2a, alpha: 0.5, build(g, m) {
+      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.3, 0, 0.56, 0.4, 0.4); g.add(body);
+      g.add(part(new THREE.SphereGeometry(0.16, 6, 5), m, 0.3, 0.4, 0));
+      g.add(part(new THREE.ConeGeometry(0.04, 0.16, 4), eyeMat, 0.48, 0.38, 0, 1, 1, 1, 0, 0, -Math.PI / 2));
+      g.add(part(new THREE.BoxGeometry(0.3, 0.04, 0.04), bandMat, 0.3, 0.44, 0.08)); g.add(part(new THREE.BoxGeometry(0.3, 0.04, 0.04), bandMat, 0.3, 0.44, -0.08));
+      eye(g, 0.4, 0.46, 0.08, 0.04); eye(g, 0.4, 0.46, -0.08, 0.04);
+      const legs = [leg(g, m, 0.05, 0.14, 0.08, 0.14, 0.02), leg(g, m, 0.05, 0.14, -0.08, 0.14, 0.02)];
+      const threads = [thread(g, [-0.1, 0.12, 0], [0, -1, 0], 0.5, 0, 0x9fc4ff)];
+      return { body, legs, threads, gait: 'hop' };
+    } },
+    slug: { rim: 0xe0d0a8, inner: 0x2a2018, alpha: 0.55, build(g, m) {
+      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.16, 0, 0.8, 0.3, 0.4); g.add(body);
+      g.add(part(new THREE.BoxGeometry(0.5, 0.03, 0.03), bandMat, -0.05, 0.31, 0));
+      const threads = [thread(g, [0.36, 0.26, 0.06], [0.7, 0.9, 0.2], 0.25, 0, 0xe0d0a8), thread(g, [0.36, 0.26, -0.06], [0.7, 0.9, -0.2], 0.25, 0, 0xe0d0a8)];
+      return { body, legs: [], threads, gait: 'crawl' };
+    } },
   };
-  const FRAME_WALK_A = 0, FRAME_WALK_B = 1, FRAME_REST = 2;
-  const texCache = {};
-  // sprite sheet: frames side by side, each with a 1-px outline and a 1-px margin
-  function spriteTexture(name) {
-    if (texCache[name]) return texCache[name];
-    const s = SPRITES[name] || SPRITES.beetle;
-    const cols = s.frames[0][0].length, rows = s.frames[0].length, n = s.frames.length;
-    const fw = cols + 2, fh = rows + 2;
-    const cv = document.createElement('canvas'); cv.width = fw * n; cv.height = fh;
-    const g = cv.getContext('2d');
-    s.frames.forEach((frame, fi) => {
-      const ox = fi * fw;
-      const solid = (x, y) => y >= 0 && y < rows && x >= 0 && x < cols && frame[y][x] !== '.';
-      g.fillStyle = '#0c0a12';
-      for (let y = -1; y <= rows; y++) for (let x = -1; x <= cols; x++) {
-        if (!solid(x, y) && (solid(x + 1, y) || solid(x - 1, y) || solid(x, y + 1) || solid(x, y - 1))) g.fillRect(ox + x + 1, y + 1, 1, 1);
-      }
-      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-        const ch = frame[y][x]; if (ch === '.') continue;
-        g.fillStyle = s.pal[ch]; g.fillRect(ox + x + 1, y + 1, 1, 1);
-      }
-    });
-    const t = new THREE.CanvasTexture(cv);
-    t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false;
-    t.encoding = THREE.sRGBEncoding;
-    texCache[name] = { tex: t, w: fw, h: fh, n };
-    return texCache[name];
-  }
-  function setFrame(c, frame, flip) {
-    const n = c.frames;
-    if (flip) { c.tex.repeat.x = -1 / n; c.tex.offset.x = (frame + 1) / n; }
-    else { c.tex.repeat.x = 1 / n; c.tex.offset.x = frame / n; }
-    c.frame = frame; c.flipped = flip;
-  }
   W.addCreature = function (spec) {
+    const def = SPECIES3D[spec.sprite] || SPECIES3D.beetle;
     const g = new THREE.Group();
-    const st = spriteTexture(spec.sprite);
-    const tex = st.tex.clone(); tex.needsUpdate = true;
-    tex.repeat.set(1 / st.n, 1);
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.5, toneMapped: false });
-    const sprite = new THREE.Sprite(mat);
-    const unit = 0.17 * (spec.size || 1);
-    sprite.scale.set(st.w * unit, st.h * unit, 1);
-    sprite.center.set(0.5, 0.3);
+    const mat = membrane(def.rim, def.inner, def.alpha);
+    const parts = def.build(g, mat);
     const hit = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 6), new THREE.MeshBasicMaterial({ visible: false }));
-    g.add(sprite); g.add(hit);
+    hit.position.y = 0.3; g.add(hit);
+    g.scale.setScalar(spec.size || 1);
     scene.add(g);
-    const c = { spec, group: g, sprite, mat, tex, hit, baseScale: sprite.scale.clone(), facing: 1, flipped: false, frame: -1, frames: st.n, restT: 0, bob: Math.random() * 6 };
-    setFrame(c, FRAME_WALK_A, false);
+    const c = { spec, group: g, mat, hit, parts, size: spec.size || 1, yaw: Math.random() * 6.28, yawTarget: 0, restT: 0, bob: Math.random() * 6, prev: new THREE.Vector3(1e9, 0, 0) };
     hit.userData.creature = c;
     creatures.push(c);
     return c;
@@ -375,31 +418,46 @@
   W.removeCreature = function (c) {
     const i = creatures.indexOf(c); if (i >= 0) creatures.splice(i, 1);
     scene.remove(c.group);
-    c.tex.dispose(); c.mat.dispose(); c.hit.geometry.dispose();
+    c.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    c.mat.dispose();
     if (cam.follow === c) cam.follow = null;
   };
   W.updateCreature = function (c, x, y, z, state, scale) {
-    const g = c.group;
-    // face the way we move, judged in screen space so it survives the orbiting camera
-    const dx = x - g.position.x, dz = z - g.position.z;
-    const sx = dx * camRight.x + dz * camRight.z;
-    if (Math.abs(sx) > 0.0015) c.facing = sx < 0 ? -1 : 1;
-    g.position.set(x, y, z);
-    const s = scale != null ? scale : 1;
-    c.sprite.scale.set(c.baseScale.x * s, c.baseScale.y * s, 1);
-    const flip = c.facing > 0; // sprites are drawn facing left
-    // frame: walk cycle while moving (faster when fleeing), a slow shuffle while busy, the sleeping pose after a while at rest
-    const t = clock.elapsedTime;
+    const g = c.group, t = clock.elapsedTime, p = c.parts;
+    // turn toward the way we move
+    if (c.prev.x < 1e8) {
+      const dx = x - c.prev.x, dz = z - c.prev.z;
+      if (dx * dx + dz * dz > 1e-6) c.yawTarget = Math.atan2(-dz, dx);
+    }
+    c.prev.set(x, y, z);
+    let d = c.yawTarget - c.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+    c.yaw += d * Math.min(1, lastDt * 8);
+    g.rotation.y = c.yaw;
+    g.position.set(x, y - 0.22, z);
+    g.scale.setScalar(c.size * (scale != null ? scale : 1));
+    // state → tempo, glow, posture
     c.restT = state === 'rest' ? c.restT + lastDt : 0;
-    let frame = FRAME_WALK_A;
-    if (state === 'wander') frame = Math.floor(t * 5 + c.bob) % 2;
-    else if (state === 'flee') frame = Math.floor(t * 12 + c.bob) % 2;
-    else if (state === 'act') frame = Math.floor(t * 2.5 + c.bob) % 2;
-    else if (state === 'rest' && c.restT > 1.5) frame = FRAME_REST;
-    if (frame !== c.frame || flip !== c.flipped) setFrame(c, frame, flip);
+    const asleep = state === 'rest' && c.restT > 1.5;
     const moving = state === 'wander' || state === 'flee';
-    c.sprite.position.y = moving ? Math.abs(Math.sin(t * (state === 'flee' ? 14 : 7) + c.bob)) * 0.09 : 0;
-    c.mat.opacity = frame === FRAME_REST ? 0.9 : 1;
+    const f = state === 'flee' ? 13 : state === 'wander' ? 6.5 : state === 'act' ? 3 : 0;
+    const m = moving ? 1 : state === 'act' ? 0.5 : 0;
+    const pulse = (asleep ? 0.7 : state === 'alert' || state === 'flee' ? 3.0 : 1.6) * (0.85 + 0.15 * Math.sin(t * 1.5 + c.bob));
+    c.mat.uniforms.uPulse.value = pulse;
+    const squash = asleep ? 0.8 : 1;
+    p.body.scale.y = (p.bodyScaleY || (p.bodyScaleY = p.body.scale.y)) * squash;
+    // gait
+    const ph = t * f + c.bob;
+    p.legs.forEach((l, i) => { l.rotation.z = Math.sin(ph + (i % 2) * Math.PI + (i > 1 ? Math.PI : 0)) * 0.6 * m; });
+    let lift = 0;
+    if (p.gait === 'walk') lift = Math.abs(Math.sin(ph)) * 0.04 * m;
+    else if (p.gait === 'hop') lift = Math.max(0, Math.sin(ph * 0.5)) * 0.22 * m;
+    else if (p.gait === 'crawl') p.body.scale.x = (p.bodyScaleX || (p.bodyScaleX = p.body.scale.x)) * (1 + Math.sin(ph) * 0.12 * m);
+    else if (p.gait === 'fly') { lift = 0.06 + Math.sin(t * 2 + c.bob) * 0.06; p.wings.forEach((w, i) => { w.rotation.x = Math.sin(t * (moving ? 16 : 5) + c.bob) * 0.9 * (i ? -1 : 1); }); }
+    g.position.y += lift;
+    // threads sag at rest, stream out at speed, snap straight when alarmed
+    const sag = state === 'alert' || state === 'flee' ? 0.1 : asleep ? 1.4 : 1;
+    const flutter = 0.5 + m * 1.5;
+    p.threads.forEach(th => animThread(th, t, sag, flutter));
   };
 
   /* ---------- post: low-res + palette + dither + bloom ---------- */
