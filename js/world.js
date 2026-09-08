@@ -1,5 +1,5 @@
 /* Three.js scene drawn like a 16-bit game: rendered to a low-res target, palette-quantised with an ordered dither,
-   a faint bloom on top, creatures as low-poly membranes with a luminous rim and trailing threads. */
+   a faint bloom on top, creatures as neon wireframe solids with a lit core. */
 (function () {
   const W = {};
   const R = 9.5;                 // plot radius
@@ -282,135 +282,63 @@
     fireflies.geometry.attributes.color.needsUpdate = true;
   }
 
-  /* ---------- creatures: low-poly membranes with a luminous rim, glowing eye spots and trailing threads ---------- */
-  const rimVert = `varying vec3 vN, vP; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vP = mv.xyz; vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * mv; }`;
-  const rimFrag = `uniform vec3 uRim, uInner; uniform float uAlpha, uPulse; varying vec3 vN, vP;
-    void main(){
-      vec3 n = normalize(vN); vec3 v = normalize(-vP);
-      float f = pow(1.0 - max(0.0, dot(n, v)), 1.6);
-      float glow = clamp(f * uPulse, 0.0, 1.0);
-      gl_FragColor = vec4(mix(uInner, uRim, glow), mix(uAlpha, 1.0, glow));
-    }`;
-  function membrane(rim, inner, alpha) {
-    return new THREE.ShaderMaterial({ uniforms: { uRim: { value: new THREE.Color(rim) }, uInner: { value: new THREE.Color(inner) }, uAlpha: { value: Math.min(1, alpha + 0.2) }, uPulse: { value: 1.6 } },
-      vertexShader: rimVert, fragmentShader: rimFrag, transparent: true, depthWrite: true, side: THREE.DoubleSide });
-  }
-  const EYE = 0xffcd78;
-  const flat = geo => { const g = geo.toNonIndexed(); g.computeVertexNormals(); return g; };
-  // every body part gets a dark back-face shell: the one-pixel outline that keeps a creature legible on grass
-  const outlineMat = new THREE.MeshBasicMaterial({ color: 0x0a0c12, side: THREE.BackSide, toneMapped: false });
-  function part(geo, mat, x, y, z, sx, sy, sz, rx, ry, rz, noOutline) {
-    const m = new THREE.Mesh(flat(geo), mat);
-    m.position.set(x || 0, y || 0, z || 0); m.scale.set(sx || 1, sy || 1, sz || 1); m.rotation.set(rx || 0, ry || 0, rz || 0);
-    if (!noOutline && mat !== eyeMat && mat !== bandMat) { const o = new THREE.Mesh(m.geometry, outlineMat); o.scale.setScalar(1.14); m.add(o); }
-    return m;
-  }
-  function leg(g, mat, x, y, z, h, r) { // a pivot at the hip so the leg can swing
-    const p = new THREE.Group(); p.position.set(x, y, z);
-    p.add(part(new THREE.CylinderGeometry(r * 0.7, r, h, 5, 1), mat, 0, -h / 2, 0));
-    g.add(p); return p;
-  }
-  function eye(g, x, y, z, r) { const m = part(new THREE.SphereGeometry(r || 0.05, 5, 4), eyeMat, x, y, z); g.add(m); return m; }
-  const eyeMat = new THREE.MeshBasicMaterial({ color: EYE, toneMapped: false });
-  const bandMat = new THREE.MeshBasicMaterial({ color: 0xcdf2ec, transparent: true, opacity: 0.85, toneMapped: false });
-  // a thread: a line of segments from an anchor, sagging and swaying in the creature's own space
-  function thread(g, anchor, dir, len, droop, color) {
-    const segs = 6, pts = new Float32Array((segs + 1) * 3);
-    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.75, toneMapped: false }));
-    line.frustumCulled = false; g.add(line);
-    return { line, pts, segs, anchor: new THREE.Vector3(anchor[0], anchor[1], anchor[2]), dir: new THREE.Vector3(dir[0], dir[1], dir[2]).normalize(), len, droop, phase: Math.random() * 6, bead: null };
-  }
-  function animThread(th, t, sag, flutter) {
-    const p = th.pts, n = th.segs;
-    for (let i = 0; i <= n; i++) {
-      const k = i / n;
-      p[i * 3] = th.anchor.x + th.dir.x * k * th.len + Math.sin(t * 2.2 + k * 4 + th.phase) * 0.06 * k * flutter;
-      p[i * 3 + 1] = th.anchor.y + th.dir.y * k * th.len - th.droop * sag * k * k * th.len + Math.sin(t * 1.7 + k * 3 + th.phase) * 0.04 * k;
-      p[i * 3 + 2] = th.anchor.z + th.dir.z * k * th.len + Math.cos(t * 1.9 + k * 3.5 + th.phase) * 0.06 * k * flutter;
+  /* ---------- creatures: neon wireframe solids with a lit core ---------- */
+  // every edge of the shape becomes a thin cylinder so the wire stays bold after the pixel pass
+  function wire(geo, color, thick) {
+    const e = new THREE.EdgesGeometry(geo, 1).attributes.position;
+    const mat = new THREE.MeshBasicMaterial({ color, toneMapped: false, transparent: true, opacity: 1 });
+    const g = new THREE.Group();
+    const up = new THREE.Vector3(0, 1, 0), a = new THREE.Vector3(), b = new THREE.Vector3();
+    for (let i = 0; i < e.count; i += 2) {
+      a.set(e.getX(i), e.getY(i), e.getZ(i)); b.set(e.getX(i + 1), e.getY(i + 1), e.getZ(i + 1));
+      const len = a.distanceTo(b);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(thick, thick, len, 4, 1), mat);
+      m.position.copy(a).lerp(b, 0.5);
+      m.quaternion.setFromUnitVectors(up, b.clone().sub(a).normalize());
+      g.add(m);
     }
-    th.line.geometry.attributes.position.needsUpdate = true;
-    if (th.bead) th.bead.position.set(p[n * 3], p[n * 3 + 1], p[n * 3 + 2]);
+    return { group: g, mat };
   }
-  // species: rim / inner colours, body translucency, and a builder (forward is +X, feet at y = 0)
-  const SPECIES3D = {
-    badger: { rim: 0x9fe8dd, inner: 0x0f1e22, alpha: 0.55, build(g, m) {
-      const body = part(new THREE.SphereGeometry(0.5, 8, 6), m, 0, 0.36, 0, 1.3, 0.62, 0.8); g.add(body);
-      g.add(part(new THREE.SphereGeometry(0.28, 7, 5), m, 0.66, 0.4, 0, 1.15, 0.8, 0.9));
-      g.add(part(new THREE.BoxGeometry(0.34, 0.05, 0.05), bandMat, 0.72, 0.5, 0.15)); g.add(part(new THREE.BoxGeometry(0.34, 0.05, 0.05), bandMat, 0.72, 0.5, -0.15));
-      eye(g, 0.9, 0.44, 0.13); eye(g, 0.9, 0.44, -0.13);
-      const legs = [leg(g, m, 0.38, 0.28, 0.26, 0.3, 0.07), leg(g, m, 0.38, 0.28, -0.26, 0.3, 0.07), leg(g, m, -0.38, 0.28, 0.26, 0.3, 0.07), leg(g, m, -0.38, 0.28, -0.26, 0.3, 0.07)];
-      const threads = [thread(g, [-0.62, 0.4, 0], [-1, 0.15, 0], 0.75, 0.5, 0x9fe8dd), thread(g, [-0.6, 0.36, 0.12], [-1, 0.05, 0.25], 0.6, 0.5, 0x9fe8dd), thread(g, [-0.6, 0.36, -0.12], [-1, 0.05, -0.25], 0.6, 0.5, 0x9fe8dd)];
-      return { body, legs, threads, gait: 'walk' };
-    } },
-    toad: { rim: 0xa8f0d0, inner: 0x12241c, alpha: 0.55, build(g, m) {
-      const body = part(new THREE.SphereGeometry(0.5, 8, 6), m, 0, 0.26, 0, 0.95, 0.55, 0.85); g.add(body);
-      g.add(part(new THREE.SphereGeometry(0.13, 6, 5), m, 0.28, 0.5, 0.2)); g.add(part(new THREE.SphereGeometry(0.13, 6, 5), m, 0.28, 0.5, -0.2));
-      eye(g, 0.36, 0.55, 0.2, 0.06); eye(g, 0.36, 0.55, -0.2, 0.06);
-      [[0.32, 0.35], [0.32, -0.35], [-0.3, 0.38], [-0.3, -0.38]].forEach(([x, z]) => g.add(part(new THREE.SphereGeometry(0.1, 5, 4), m, x, 0.08, z, 1.3, 0.7, 1)));
-      return { body, legs: [], threads: [], gait: 'hop' };
-    } },
-    vole: { rim: 0xbfe8dd, inner: 0x1a1c22, alpha: 0.5, build(g, m) {
-      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.22, 0, 0.7, 0.42, 0.46); g.add(body);
-      g.add(part(new THREE.SphereGeometry(0.17, 6, 5), m, 0.42, 0.26, 0));
-      g.add(part(new THREE.SphereGeometry(0.06, 5, 4), m, 0.4, 0.42, 0.1)); g.add(part(new THREE.SphereGeometry(0.06, 5, 4), m, 0.4, 0.42, -0.1));
-      eye(g, 0.56, 0.3, 0.08, 0.04); eye(g, 0.56, 0.3, -0.08, 0.04);
-      const legs = [leg(g, m, 0.2, 0.16, 0.14, 0.16, 0.04), leg(g, m, 0.2, 0.16, -0.14, 0.16, 0.04), leg(g, m, -0.2, 0.16, 0.14, 0.16, 0.04), leg(g, m, -0.2, 0.16, -0.14, 0.16, 0.04)];
-      const tail = thread(g, [-0.34, 0.22, 0], [-1, 0.2, 0], 0.6, 0.6, 0xbfe8dd); tail.bead = eye(g, 0, 0, 0, 0.045);
-      return { body, legs, threads: [tail], gait: 'walk' };
-    } },
-    beetle: { rim: 0xb8a6ff, inner: 0x0a0a16, alpha: 0.8, build(g, m) {
-      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.14, 0, 0.5, 0.3, 0.45); g.add(body);
-      g.add(part(new THREE.BoxGeometry(0.4, 0.03, 0.03), bandMat, -0.02, 0.29, 0));
-      const threads = [thread(g, [0.22, 0.2, 0.06], [0.7, 0.9, 0.3], 0.35, 0, 0xb8a6ff), thread(g, [0.22, 0.2, -0.06], [0.7, 0.9, -0.3], 0.35, 0, 0xb8a6ff)];
-      const legs = [leg(g, m, 0.12, 0.1, 0.16, 0.1, 0.025), leg(g, m, 0.12, 0.1, -0.16, 0.1, 0.025), leg(g, m, -0.12, 0.1, 0.16, 0.1, 0.025), leg(g, m, -0.12, 0.1, -0.16, 0.1, 0.025)];
-      return { body, legs, threads, gait: 'walk' };
-    } },
-    moth: { rim: 0xf0ecf8, inner: 0x2a2a3a, alpha: 0.4, build(g, m) {
-      const body = part(new THREE.SphereGeometry(0.5, 6, 5), m, 0, 0.5, 0, 0.5, 0.16, 0.16); g.add(body);
-      eye(g, 0.22, 0.52, 0, 0.05);
-      const wings = [];
-      [1, -1].forEach(s => { const p = new THREE.Group(); p.position.set(0, 0.55, s * 0.05); p.add(part(new THREE.PlaneGeometry(0.5, 0.36), m, 0, 0, s * 0.2, 1, 1, 1, -Math.PI / 2, 0, 0, true)); g.add(p); wings.push(p); });
-      const threads = [thread(g, [0.24, 0.55, 0.03], [0.8, 0.8, 0.2], 0.25, 0, 0xf0ecf8), thread(g, [0.24, 0.55, -0.03], [0.8, 0.8, -0.2], 0.25, 0, 0xf0ecf8)];
-      return { body, legs: [], threads, wings, gait: 'fly' };
-    } },
-    wren: { rim: 0xd8e8c8, inner: 0x1a2018, alpha: 0.5, build(g, m) {
-      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.3, 0, 0.56, 0.44, 0.42); g.add(body);
-      g.add(part(new THREE.SphereGeometry(0.17, 6, 5), m, 0.3, 0.44, 0));
-      g.add(part(new THREE.ConeGeometry(0.05, 0.16, 4), eyeMat, 0.5, 0.42, 0, 1, 1, 1, 0, 0, -Math.PI / 2));
-      eye(g, 0.4, 0.5, 0.09, 0.04); eye(g, 0.4, 0.5, -0.09, 0.04);
-      g.add(part(new THREE.BoxGeometry(0.28, 0.03, 0.12), m, -0.34, 0.42, 0, 1, 1, 1, 0, 0, 0.55));
-      const legs = [leg(g, m, 0.05, 0.14, 0.08, 0.14, 0.02), leg(g, m, 0.05, 0.14, -0.08, 0.14, 0.02)];
-      const threads = [thread(g, [-0.46, 0.5, 0], [-1, 0.3, 0], 0.45, 0.4, 0xd8e8c8), thread(g, [-0.44, 0.48, 0.06], [-1, 0.2, 0.3], 0.4, 0.4, 0xd8e8c8), thread(g, [-0.44, 0.48, -0.06], [-1, 0.2, -0.3], 0.4, 0.4, 0xd8e8c8)];
-      return { body, legs, threads, gait: 'hop' };
-    } },
-    nuthatch: { rim: 0x9fc4ff, inner: 0x101a2a, alpha: 0.5, build(g, m) {
-      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.3, 0, 0.56, 0.4, 0.4); g.add(body);
-      g.add(part(new THREE.SphereGeometry(0.16, 6, 5), m, 0.3, 0.4, 0));
-      g.add(part(new THREE.ConeGeometry(0.04, 0.16, 4), eyeMat, 0.48, 0.38, 0, 1, 1, 1, 0, 0, -Math.PI / 2));
-      g.add(part(new THREE.BoxGeometry(0.3, 0.04, 0.04), bandMat, 0.3, 0.44, 0.08)); g.add(part(new THREE.BoxGeometry(0.3, 0.04, 0.04), bandMat, 0.3, 0.44, -0.08));
-      eye(g, 0.4, 0.46, 0.08, 0.04); eye(g, 0.4, 0.46, -0.08, 0.04);
-      const legs = [leg(g, m, 0.05, 0.14, 0.08, 0.14, 0.02), leg(g, m, 0.05, 0.14, -0.08, 0.14, 0.02)];
-      const threads = [thread(g, [-0.1, 0.12, 0], [0, -1, 0], 0.5, 0, 0x9fc4ff)];
-      return { body, legs, threads, gait: 'hop' };
-    } },
-    slug: { rim: 0xe0d0a8, inner: 0x2a2018, alpha: 0.55, build(g, m) {
-      const body = part(new THREE.SphereGeometry(0.5, 7, 5), m, 0, 0.16, 0, 0.8, 0.3, 0.4); g.add(body);
-      g.add(part(new THREE.BoxGeometry(0.5, 0.03, 0.03), bandMat, -0.05, 0.31, 0));
-      const threads = [thread(g, [0.36, 0.26, 0.06], [0.7, 0.9, 0.2], 0.25, 0, 0xe0d0a8), thread(g, [0.36, 0.26, -0.06], [0.7, 0.9, -0.2], 0.25, 0, 0xe0d0a8)];
-      return { body, legs: [], threads, gait: 'crawl' };
-    } },
+  // a ring drawn as a loop of cylinders, lying flat
+  function ringWire(radius, segments, color, thick) {
+    const mat = new THREE.MeshBasicMaterial({ color, toneMapped: false, transparent: true, opacity: 1 });
+    const g = new THREE.Group();
+    const up = new THREE.Vector3(0, 1, 0), a = new THREE.Vector3(), b = new THREE.Vector3();
+    for (let i = 0; i < segments; i++) {
+      const t0 = i / segments * Math.PI * 2, t1 = (i + 1) / segments * Math.PI * 2;
+      a.set(Math.cos(t0) * radius, 0, Math.sin(t0) * radius); b.set(Math.cos(t1) * radius, 0, Math.sin(t1) * radius);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(thick, thick, a.distanceTo(b) * 1.05, 4, 1), mat);
+      m.position.copy(a).lerp(b, 0.5);
+      m.quaternion.setFromUnitVectors(up, b.clone().sub(a).normalize());
+      g.add(m);
+    }
+    return { group: g, mat };
+  }
+  // species → shape, wire colour, core colour and size, spin speed
+  const SHAPES3D = {
+    badger:   { shape: () => new THREE.BoxGeometry(1.4, 1.4, 1.4), color: 0xff2d6e, core: 0xff6a2a, coreR: 0.2, spin: 0.35 },
+    nuthatch: { shape: () => new THREE.BoxGeometry(0.9, 0.9, 0.9), color: 0x27e8c8, core: 0xff3b3b, coreR: 0.12, spin: 0.5 },
+    toad:     { ring: 0.62, color: 0xffd23f, core: 0xff5a2a, coreR: 0.15, spin: 0.25 },
+    vole:     { shape: () => new THREE.OctahedronGeometry(0.66), color: 0xf4f4f0, core: 0xff3b3b, coreR: 0.11, spin: 0.9 },
+    beetle:   { shape: () => new THREE.TetrahedronGeometry(0.56), color: 0xf4f4f0, core: 0xff8a2a, coreR: 0.09, spin: 0.6 },
+    moth:     { shape: () => new THREE.ConeGeometry(0.48, 0.92, 3), color: 0x27e8c8, core: 0xff3b3b, coreR: 0.11, spin: 0.7, hover: true },
+    wren:     { shape: () => new THREE.ConeGeometry(0.52, 0.88, 4), color: 0x27e8c8, core: 0xffffff, coreR: 0.11, spin: 0.6 },
+    slug:     { ring: 0.42, color: 0xd9c9b5, core: 0xff8a2a, coreR: 0.09, spin: 0.15 },
   };
   W.addCreature = function (spec) {
-    const def = SPECIES3D[spec.sprite] || SPECIES3D.beetle;
+    const def = SHAPES3D[spec.sprite] || SHAPES3D.beetle;
     const g = new THREE.Group();
-    const mat = membrane(def.rim, def.inner, def.alpha);
-    const parts = def.build(g, mat);
+    const thick = 0.06;
+    const w = def.ring ? ringWire(def.ring, 14, def.color, thick) : wire(def.shape(), def.color, thick);
+    g.add(w.group);
+    const coreMat = new THREE.MeshBasicMaterial({ color: def.core, toneMapped: false, transparent: true, opacity: 1 });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(def.coreR, 8, 6), coreMat);
+    g.add(core);
     const hit = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 6), new THREE.MeshBasicMaterial({ visible: false }));
-    hit.position.y = 0.3; g.add(hit);
+    g.add(hit);
     g.scale.setScalar(spec.size || 1);
     scene.add(g);
-    const c = { spec, group: g, mat, hit, parts, size: spec.size || 1, yaw: Math.random() * 6.28, yawTarget: 0, restT: 0, bob: Math.random() * 6, prev: new THREE.Vector3(1e9, 0, 0) };
+    const c = { spec, group: g, wire: w.group, wireMat: w.mat, core, coreMat, coreColor: new THREE.Color(def.core), hit, def, size: spec.size || 1, restT: 0, bob: Math.random() * 6, tilt: Math.random() * 6 };
     hit.userData.creature = c;
     creatures.push(c);
     return c;
@@ -419,45 +347,30 @@
     const i = creatures.indexOf(c); if (i >= 0) creatures.splice(i, 1);
     scene.remove(c.group);
     c.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
-    c.mat.dispose();
+    c.wireMat.dispose(); c.coreMat.dispose();
     if (cam.follow === c) cam.follow = null;
   };
+  const flashCol = new THREE.Color(0xffffff);
   W.updateCreature = function (c, x, y, z, state, scale) {
-    const g = c.group, t = clock.elapsedTime, p = c.parts;
-    // turn toward the way we move
-    if (c.prev.x < 1e8) {
-      const dx = x - c.prev.x, dz = z - c.prev.z;
-      if (dx * dx + dz * dz > 1e-6) c.yawTarget = Math.atan2(-dz, dx);
-    }
-    c.prev.set(x, y, z);
-    let d = c.yawTarget - c.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
-    c.yaw += d * Math.min(1, lastDt * 8);
-    g.rotation.y = c.yaw;
-    g.position.set(x, y - 0.22, z);
-    g.scale.setScalar(c.size * (scale != null ? scale : 1));
-    // state → tempo, glow, posture
+    const g = c.group, t = clock.elapsedTime, d = c.def;
     c.restT = state === 'rest' ? c.restT + lastDt : 0;
     const asleep = state === 'rest' && c.restT > 1.5;
     const moving = state === 'wander' || state === 'flee';
-    const f = state === 'flee' ? 13 : state === 'wander' ? 6.5 : state === 'act' ? 3 : 0;
-    const m = moving ? 1 : state === 'act' ? 0.5 : 0;
-    const pulse = (asleep ? 0.7 : state === 'alert' || state === 'flee' ? 3.0 : 1.6) * (0.85 + 0.15 * Math.sin(t * 1.5 + c.bob));
-    c.mat.uniforms.uPulse.value = pulse;
-    const squash = asleep ? 0.8 : 1;
-    p.body.scale.y = (p.bodyScaleY || (p.bodyScaleY = p.body.scale.y)) * squash;
-    // gait
-    const ph = t * f + c.bob;
-    p.legs.forEach((l, i) => { l.rotation.z = Math.sin(ph + (i % 2) * Math.PI + (i > 1 ? Math.PI : 0)) * 0.6 * m; });
-    let lift = 0;
-    if (p.gait === 'walk') lift = Math.abs(Math.sin(ph)) * 0.04 * m;
-    else if (p.gait === 'hop') lift = Math.max(0, Math.sin(ph * 0.5)) * 0.22 * m;
-    else if (p.gait === 'crawl') p.body.scale.x = (p.bodyScaleX || (p.bodyScaleX = p.body.scale.x)) * (1 + Math.sin(ph) * 0.12 * m);
-    else if (p.gait === 'fly') { lift = 0.06 + Math.sin(t * 2 + c.bob) * 0.06; p.wings.forEach((w, i) => { w.rotation.x = Math.sin(t * (moving ? 16 : 5) + c.bob) * 0.9 * (i ? -1 : 1); }); }
-    g.position.y += lift;
-    // threads sag at rest, stream out at speed, snap straight when alarmed
-    const sag = state === 'alert' || state === 'flee' ? 0.1 : asleep ? 1.4 : 1;
-    const flutter = 0.5 + m * 1.5;
-    p.threads.forEach(th => animThread(th, t, sag, flutter));
+    const tempo = state === 'flee' ? 3.2 : state === 'alert' ? 0.2 : moving ? 1 : state === 'act' ? 0.7 : asleep ? 0.15 : 0.4;
+    g.position.set(x, y + 0.3 + (d.hover ? Math.sin(t * 2 + c.bob) * 0.08 : 0) + (moving && !d.hover ? Math.abs(Math.sin(t * 6 + c.bob)) * 0.04 : 0), z);
+    g.scale.setScalar(c.size * (scale != null ? scale : 1) * (asleep ? 0.9 : 1));
+    // tumble: rings stay flat and wobble, solids turn on their axis and nod
+    c.wire.rotation.y += d.spin * tempo * lastDt * 2;
+    if (d.ring) { c.wire.rotation.x = Math.sin(t * 0.8 + c.tilt) * 0.12; c.wire.rotation.z = Math.cos(t * 0.6 + c.tilt) * 0.12; }
+    else c.wire.rotation.x = Math.sin(t * 0.7 + c.tilt) * 0.18;
+    // the core: bobs, pulses when busy, flashes white when alarmed, dims to an ember in sleep
+    c.core.position.y = Math.sin(t * 2.4 * Math.max(0.3, tempo) + c.bob) * 0.05;
+    const pulse = state === 'act' ? 1 + 0.25 * Math.sin(t * 6 + c.bob) : 1;
+    c.core.scale.setScalar(pulse * (asleep ? 0.7 : 1));
+    if (state === 'alert' || state === 'flee') c.coreMat.color.copy(c.coreColor).lerp(flashCol, 0.5 + 0.5 * Math.sin(t * 12));
+    else c.coreMat.color.copy(c.coreColor);
+    c.wireMat.opacity = asleep ? 0.5 : 1;
+    c.coreMat.opacity = asleep ? 0.75 : 1;
   };
 
   /* ---------- post: low-res + palette + dither + bloom ---------- */
