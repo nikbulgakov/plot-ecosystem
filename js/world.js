@@ -189,43 +189,81 @@
   }
 
   /* ---------- creatures: pixel sprites ---------- */
+  // Each species has three frames of the same size: two walk frames and a sleeping pose.
   const K = '#14121c';
   const SPRITES = {
-    badger:   { rows: ['....GGGGGG..', '..GGGGGGGGG.', '.WKWGGGGGGGG', 'KWKWGGGGGGGG', '.WKWGGGGGGG.', '..GGGGGGGG..', '..K..K.K.K..'], pal: { G: '#8a8896', W: '#f4f4f6', K: K } },
-    toad:     { rows: ['..Y...Y..', '.YYYYYYY.', 'YYOYYYOYY', 'YYYYYYYYY', '.YYYYYYY.', 'YY.....YY'], pal: { Y: '#d2bc4c', O: K } },
-    vole:     { rows: ['..BBBB.', '.BBBBBK', 'BBBBBBB', 'P.B..B.'], pal: { B: '#a8743f', K: K, P: '#f0a0a0' } },
-    beetle:   { rows: ['.KKK.', 'KKHKK', 'KKKKK', 'K.K.K'], pal: { K: '#20202c', H: '#7a7a96' } },
-    moth:     { rows: ['M.......M', 'MMM...MMM', '.MMMPMMM.', '..MMPMM..', '...M.M...'], pal: { M: '#f0ecf8', P: '#d884b8' } },
-    wren:     { rows: ['.....B', '.RRR.B', 'RRRRBB', 'RRRRR.', '.K..K.'], pal: { R: '#b47a4e', B: '#86643f', K: K } },
-    nuthatch: { rows: ['.NNNN.', 'NNNNNK', 'NWWWNN', '.NWWN.', '..N.N.'], pal: { N: '#7a9ac4', W: '#f2ece2', K: K } },
-    slug:     { rows: ['....TT.', 'TTTTTTT', '.TTTTT.'], pal: { T: '#dcb884' } },
+    badger: { pal: { G: '#8a8896', W: '#f4f4f6', K: K }, frames: [
+      ['....GGGGGG..', '..GGGGGGGGG.', '.WKWGGGGGGGG', 'KWKWGGGGGGGG', '.WKWGGGGGGG.', '..GGGGGGGG..', '..K..K.K.K..'],
+      ['....GGGGGG..', '..GGGGGGGGG.', '.WKWGGGGGGGG', 'KWKWGGGGGGGG', '.WKWGGGGGGG.', '..GGGGGGGG..', '.K..K..K..K.'],
+      ['............', '....GGGGG...', '..GGGGGGGGG.', '.WKWGGGGGGGG', 'KWKWGGGGGGGG', '.WKGGGGGGGG.', '..GGGGGGGGG.']] },
+    toad: { pal: { Y: '#d2bc4c', O: K, S: '#8a7a2a' }, frames: [
+      ['..Y...Y..', '.YYYYYYY.', 'YYOYYYOYY', 'YYYYYYYYY', '.YYYYYYY.', 'YY.....YY'],
+      ['..Y...Y..', '.YYYYYYY.', 'YYOYYYOYY', 'YYYYYYYYY', 'YYYYYYYYY', '.Y.....Y.'],
+      ['.........', '..Y...Y..', '.YYYYYYY.', 'YYSYYYSYY', 'YYYYYYYYY', 'YYYYYYYYY']] },
+    vole: { pal: { B: '#a8743f', K: K, P: '#f0a0a0' }, frames: [
+      ['..BBBB.', '.BBBBBK', 'BBBBBBB', 'P.B..B.'],
+      ['..BBBB.', '.BBBBBK', 'BBBBBBB', '.PB.B..'],
+      ['.......', '..BBBB.', '.BBBBBB', 'PBBBBB.']] },
+    beetle: { pal: { K: '#20202c', H: '#7a7a96' }, frames: [
+      ['.KKK.', 'KKHKK', 'KKKKK', 'K.K.K'],
+      ['.KKK.', 'KKHKK', 'KKKKK', '.K.K.'],
+      ['.KKK.', 'KKHKK', 'KKKKK', '.....']] },
+    moth: { pal: { M: '#f0ecf8', P: '#d884b8' }, frames: [
+      ['M.......M', 'MMM...MMM', '.MMMPMMM.', '..MMPMM..', '...M.M...'],
+      ['.........', '..M...M..', '.MMMPMMM.', '..MMPMM..', '...M.M...'],
+      ['.........', '.........', '..MMPMM..', '.MMMPMMM.', '...M.M...']] },
+    wren: { pal: { R: '#b47a4e', B: '#86643f', K: K }, frames: [
+      ['.....B', '.RRR.B', 'RRRRBB', 'RRRRR.', '.K..K.'],
+      ['.RRR..', 'RRRRB.', 'RRRRBB', '.RRR..', '..KK..'],
+      ['......', '.RRR.B', 'RRRRRB', 'RRRRR.', '.RRRR.']] },
+    nuthatch: { pal: { N: '#7a9ac4', W: '#f2ece2', K: K }, frames: [
+      ['.NNNN.', 'NNNNNK', 'NWWWNN', '.NWWN.', '..N.N.'],
+      ['.NNNN.', 'NNNNNK', 'NWWWNN', '.NWWN.', '.N..N.'],
+      ['......', '.NNNN.', 'NNNNNN', 'NWWWN.', '.NWWN.']] },
+    slug: { pal: { T: '#dcb884' }, frames: [
+      ['....TT.', 'TTTTTTT', '.TTTTT.'],
+      ['.....TT', '.TTTTTT', 'TTTTTT.'],
+      ['.......', '..TTT..', '.TTTTT.']] },
   };
+  const FRAME_WALK_A = 0, FRAME_WALK_B = 1, FRAME_REST = 2;
   const texCache = {};
+  // sprite sheet: frames side by side, each with a 1-px outline and a 1-px margin
   function spriteTexture(name) {
     if (texCache[name]) return texCache[name];
     const s = SPRITES[name] || SPRITES.beetle;
-    const cols = s.rows[0].length, rows = s.rows.length;
-    const cv = document.createElement('canvas'); cv.width = cols + 2; cv.height = rows + 2;
+    const cols = s.frames[0][0].length, rows = s.frames[0].length, n = s.frames.length;
+    const fw = cols + 2, fh = rows + 2;
+    const cv = document.createElement('canvas'); cv.width = fw * n; cv.height = fh;
     const g = cv.getContext('2d');
-    const solid = (x, y) => y >= 0 && y < rows && x >= 0 && x < cols && s.rows[y][x] !== '.';
-    g.fillStyle = '#0c0a12'; // 1-px outline
-    for (let y = -1; y <= rows; y++) for (let x = -1; x <= cols; x++) {
-      if (!solid(x, y) && (solid(x + 1, y) || solid(x - 1, y) || solid(x, y + 1) || solid(x, y - 1))) g.fillRect(x + 1, y + 1, 1, 1);
-    }
-    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-      const ch = s.rows[y][x]; if (ch === '.') continue;
-      g.fillStyle = s.pal[ch]; g.fillRect(x + 1, y + 1, 1, 1);
-    }
+    s.frames.forEach((frame, fi) => {
+      const ox = fi * fw;
+      const solid = (x, y) => y >= 0 && y < rows && x >= 0 && x < cols && frame[y][x] !== '.';
+      g.fillStyle = '#0c0a12';
+      for (let y = -1; y <= rows; y++) for (let x = -1; x <= cols; x++) {
+        if (!solid(x, y) && (solid(x + 1, y) || solid(x - 1, y) || solid(x, y + 1) || solid(x, y - 1))) g.fillRect(ox + x + 1, y + 1, 1, 1);
+      }
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+        const ch = frame[y][x]; if (ch === '.') continue;
+        g.fillStyle = s.pal[ch]; g.fillRect(ox + x + 1, y + 1, 1, 1);
+      }
+    });
     const t = new THREE.CanvasTexture(cv);
     t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false;
     t.encoding = THREE.sRGBEncoding;
-    texCache[name] = { tex: t, w: cols + 2, h: rows + 2 };
+    texCache[name] = { tex: t, w: fw, h: fh, n };
     return texCache[name];
+  }
+  function setFrame(c, frame, flip) {
+    const n = c.frames;
+    if (flip) { c.tex.repeat.x = -1 / n; c.tex.offset.x = (frame + 1) / n; }
+    else { c.tex.repeat.x = 1 / n; c.tex.offset.x = frame / n; }
+    c.frame = frame; c.flipped = flip;
   }
   W.addCreature = function (spec) {
     const g = new THREE.Group();
     const st = spriteTexture(spec.sprite);
     const tex = st.tex.clone(); tex.needsUpdate = true;
+    tex.repeat.set(1 / st.n, 1);
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.5, toneMapped: false });
     const sprite = new THREE.Sprite(mat);
     const unit = 0.17 * (spec.size || 1);
@@ -242,7 +280,8 @@
     const trail = new THREE.Points(tg, new THREE.PointsMaterial({ color: spec.trail || 0xff4a3c, size: 0.2, sizeAttenuation: true, depthTest: false, transparent: true, opacity: 0.9, toneMapped: false }));
     trail.frustumCulled = false; trail.renderOrder = 9;
     scene.add(trail);
-    const c = { spec, group: g, sprite, mat, tex, hit, trail, tp, tn: 0, tN: N, baseScale: sprite.scale.clone(), lastTrail: new THREE.Vector3(1e9, 0, 0), facing: 1, flipped: false, bob: Math.random() * 6 };
+    const c = { spec, group: g, sprite, mat, tex, hit, trail, tp, tn: 0, tN: N, baseScale: sprite.scale.clone(), lastTrail: new THREE.Vector3(1e9, 0, 0), facing: 1, flipped: false, frame: -1, frames: st.n, restT: 0, bob: Math.random() * 6 };
+    setFrame(c, FRAME_WALK_A, false);
     hit.userData.creature = c;
     creatures.push(c);
     return c;
@@ -263,7 +302,15 @@
     const s = scale != null ? scale : 1;
     c.sprite.scale.set(c.baseScale.x * s, c.baseScale.y * s, 1);
     const flip = c.facing > 0; // sprites are drawn facing left
-    if (c.flipped !== flip) { c.flipped = flip; c.tex.repeat.x = flip ? -1 : 1; c.tex.offset.x = flip ? 1 : 0; }
+    // frame: walk cycle while moving (faster when fleeing), a slow shuffle while busy, the sleeping pose after a while at rest
+    const t = clock.elapsedTime;
+    c.restT = state === 'rest' ? c.restT + lastDt : 0;
+    let frame = FRAME_WALK_A;
+    if (state === 'wander') frame = Math.floor(t * 5 + c.bob) % 2;
+    else if (state === 'flee') frame = Math.floor(t * 12 + c.bob) % 2;
+    else if (state === 'act') frame = Math.floor(t * 2.5 + c.bob) % 2;
+    else if (state === 'rest' && c.restT > 1.5) frame = FRAME_REST;
+    if (frame !== c.frame || flip !== c.flipped) setFrame(c, frame, flip);
     if (c.lastTrail.distanceTo(g.position) > 0.22) {
       c.lastTrail.copy(g.position);
       const i = c.tn % c.tN;
@@ -272,10 +319,9 @@
       c.trail.geometry.attributes.position.needsUpdate = true;
       c.trail.geometry.setDrawRange(0, Math.min(c.tn, c.tN));
     }
-    const t = clock.elapsedTime;
     const moving = state === 'wander' || state === 'flee';
     c.sprite.position.y = moving ? Math.abs(Math.sin(t * (state === 'flee' ? 14 : 7) + c.bob)) * 0.09 : 0;
-    c.mat.opacity = state === 'rest' ? 0.85 : 1;
+    c.mat.opacity = frame === FRAME_REST ? 0.9 : 1;
   };
 
   /* ---------- post: low-res + palette + dither + bloom ---------- */
@@ -417,8 +463,10 @@
   };
 
   /* ---------- frame ---------- */
+  let lastDt = 0.016;
   W.update = function () {
     const dt = Math.min(0.05, clock.getDelta());
+    lastDt = dt;
     const t = clock.elapsedTime;
     grassMat.uniforms.uTime.value = t;
     applyFlowers(dt);
