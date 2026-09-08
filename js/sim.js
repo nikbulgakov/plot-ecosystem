@@ -23,6 +23,13 @@
     if (st.temp > 20) dry *= 0.6; else if (st.temp < 3) dry = Math.max(dry, 0.5); // a warm spell greens up, a cold one browns off
     return { month: m, dry, name: SEASON_NAMES[m] };
   };
+  // the moon: phase from the synodic month, counted from the new moon of 2000-01-06
+  const MOON_NAMES = ['new moon', 'waxing crescent', 'first quarter', 'waxing gibbous', 'full moon', 'waning gibbous', 'last quarter', 'waning crescent'];
+  S.moon = function () {
+    const p = (((Date.now() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000 / 29.530588853) % 1 + 1) % 1;
+    return { phase: p, illum: (1 - Math.cos(2 * Math.PI * p)) / 2, name: MOON_NAMES[Math.round(p * 8) % 8] };
+  };
+  S.night = () => clamp(1 - S.daylight() - S.twilight() * 0.25, 0, 1);
   S.state = st;
   const timers = {};
 
@@ -255,10 +262,19 @@
       timers.thunder = st.storm ? rnd(15, 45) : rnd(40, 120);
       if (Math.random() < (st.storm ? 0.9 : 0.5)) { say(null, pick(['thunder, low and far behind the ravine', 'a long roll of thunder crosses the plot']), { sfx: 'thunder', kind: 'alarm', pluck: false }); st.tension = Math.min(1, st.tension + 0.25); for (const a of agents) if (a.state !== 'rest') { a.state = 'alert'; a.t = rnd(1, 3); } }
     }
+    // the night has its own voices
+    if (isNight() && (timers.owl || 0) <= 0) {
+      timers.owl = rnd(45, 130);
+      if (Math.random() < 0.7) say(null, pick(['an owl calls twice from beyond the ravine', 'the owl again, closer, then nothing', 'a soft double hoot from the dead crown']), { sfx: 'owl', pan: W.pan(OAK.x, OAK.z), degree: 0, octave: -1, pluckP: 0.3 });
+    }
+    if (isNight() && st.temp > 10 && !isWet() && S.season().dry < 0.6 && (timers.firefly || 0) <= 0) {
+      timers.firefly = rnd(200, 420);
+      say(null, pick(['the first fireflies blink over the grass', 'fireflies drift between the stones, on and off', 'a slow constellation of fireflies low over the verge']), { degree: 8, octave: 1, pluckP: 0.6, vol: 0.06 });
+    }
     // light remarks
     if ((timers.light || 0) <= 0) {
       timers.light = rnd(60, 110);
-      const t = st.weather === 'snow' ? pick(['snow settles on the pink stones and stays', 'the grass bends under a thin white weight', 'flakes drift through the beam without a sound']) : st.snowCover > 0.4 ? pick(['old snow lies in the hollows, grey at the edges', 'tracks cross the snow and stop at the big rock', 'the verge is white and very quiet']) : S.season().dry > 0.5 ? pick(['the grass has gone to straw, it rattles in the wind', 'seed heads stand dry and pale along the edge', 'the verge is the colour of old paper']) : isNight() ? pick(['the plot is a dark bowl, only sound now', 'stars between the branches, nothing moves for a while']) : isDusk() ? pick(['the light fails along the west edge of the plot', 'colour drains out of the flower heads']) : isDawn() ? pick(['grey light finds the top of the oak first', 'mist lifting off the grass in threads']) : st.weather === 'fog' ? 'fog sits in the bowl of the plot, sound carries oddly' : pick(['a shaft of light picks out the pink stones', 'the flowers hold still in the warm air']);
+      const t = st.weather === 'snow' ? pick(['snow settles on the pink stones and stays', 'the grass bends under a thin white weight', 'flakes drift through the beam without a sound']) : st.snowCover > 0.4 ? pick(['old snow lies in the hollows, grey at the edges', 'tracks cross the snow and stop at the big rock', 'the verge is white and very quiet']) : S.season().dry > 0.5 ? pick(['the grass has gone to straw, it rattles in the wind', 'seed heads stand dry and pale along the edge', 'the verge is the colour of old paper']) : isNight() ? (S.moon().illum > 0.6 && !isWet() && st.weather !== 'fog' ? pick(['the moon is up. the stones throw short shadows', 'moonlight on the wet stones, every blade edged in grey', 'a bright moon over the oak, the verge in silver']) : pick(['the plot is a dark bowl, only sound now', 'stars between the branches, nothing moves for a while', 'no moon to speak of, the dark is complete'])) : isDusk() ? pick(['the light fails along the west edge of the plot', 'colour drains out of the flower heads']) : isDawn() ? pick(['grey light finds the top of the oak first', 'mist lifting off the grass in threads']) : st.weather === 'fog' ? 'fog sits in the bowl of the plot, sound carries oddly' : pick(['a shaft of light picks out the pink stones', 'the flowers hold still in the warm air']);
       say(null, t, { pluck: false });
     }
     st.gust = Math.max(0, (st.gust || 0) - dt * 0.4);

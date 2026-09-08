@@ -51,8 +51,9 @@
     fillBlocks(actBlocks, s.activity); $('ui-act-n').textContent = Math.round(s.activity * 100) + '%';
     fillBlocks(tenBlocks, s.tension); $('ui-ten-n').textContent = s.tension.toFixed(2);
     $('sky-mode').textContent = s.live ? 'live sky' : 'simulated sky';
-    const se = Sim.season();
+    const se = Sim.season(), mo = Sim.moon();
     $('ui-season').textContent = s.snowCover > 0.4 ? 'snow' : se.name;
+    $('ui-moon').textContent = mo.name;
   }
 
   function drawWave() {
@@ -86,8 +87,12 @@
     Sim.tick(dt);
     Life.tick(dt, Sim.state);
     const s = Sim.state;
-    World.setAtmosphere({ hour: s.hour, mood: s.mood, rainAmount: s.rainAmount, wind: s.wind, day: Sim.daylight(), dusk: Sim.twilight(), snow: s.weather === 'snow' });
+    const moon = Sim.moon(), night = Sim.night();
+    World.setAtmosphere({ hour: s.hour, mood: s.mood, rainAmount: s.rainAmount, wind: s.wind, day: Sim.daylight(), dusk: Sim.twilight(), snow: s.weather === 'snow', moon: moon.illum, fog: s.weather === 'fog' });
     World.setSeason({ dry: Sim.season().dry, snow: s.snowCover });
+    const warm = s.temp > 10 ? Math.min(1, (s.temp - 10) / 6) : 0, dryish = 1 - Sim.season().dry * 0.7;
+    World.setNight({ night, moonPhase: moon.phase, fireflies: warm * dryish * (1 - s.rainAmount) * (s.weather === 'fog' ? 0.3 : 1) });
+    AudioEngine.setNight({ crickets: night * warm * (1 - s.rainAmount) });
     updatePanel();
     drawWave();
     drawAvatar(performance.now() / 1000);
@@ -185,17 +190,26 @@
       },
     });
   }
-  $('ui-place').addEventListener('click', async () => {
-    const name = prompt('Move the verge to a place (city name):', Weather.place() ? Weather.place().name.split(',')[0] : '');
-    if (!name || !name.trim()) return;
-    setPlaceLabel('looking up…', false);
-    try {
-      const p = await Weather.setPlace(name.trim());
-      addEvent({ text: 'the verge moves to ' + p.name.toLowerCase(), kind: 'hot' });
-    } catch (e) {
-      addEvent({ text: 'that place is not on any map here', kind: 'alarm' });
-      setPlaceLabel(Weather.place() ? Weather.place().name : 'simulated', Sim.state.live);
-    }
+  // click the place → an inline field; Enter moves the verge, Escape leaves it where it is
+  $('ui-place').addEventListener('click', () => {
+    const el = $('ui-place');
+    if (el.querySelector('input')) return;
+    const input = document.createElement('input');
+    input.type = 'text'; input.className = 'place-input'; input.placeholder = 'city name';
+    input.value = Weather.place() ? Weather.place().name.split(',')[0] : '';
+    const restore = () => setPlaceLabel(Weather.place() ? Weather.place().name : 'simulated', Sim.state.live);
+    input.addEventListener('keydown', async e => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { restore(); return; }
+      if (e.key !== 'Enter') return;
+      const name = input.value.trim(); if (!name) { restore(); return; }
+      setPlaceLabel('looking up…', false);
+      try { const p = await Weather.setPlace(name); addEvent({ text: 'the verge moves to ' + p.name.toLowerCase(), kind: 'hot' }); }
+      catch (err) { addEvent({ text: 'that place is not on any map here', kind: 'alarm' }); restore(); }
+    });
+    input.addEventListener('blur', () => { if (el.contains(input)) restore(); });
+    input.addEventListener('click', e => e.stopPropagation());
+    el.textContent = ''; el.appendChild(input); input.focus(); input.select();
   });
 
   /* ----- controls ----- */

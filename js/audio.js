@@ -3,7 +3,20 @@
   const A = {};
   let ctx, master, musicBus, worldBus, analyser, recDest, recorder, chunks = [];
   let started = false;
-  let rainGain, streamGain, windGain, padGains = [], padOscs = [], padFilter;
+  let rainGain, streamGain, windGain, cricketGain, padGains = [], padOscs = [], padFilter;
+  function cricketBuffer(seconds) {
+    const sr = ctx.sampleRate, len = Math.floor(sr * seconds), buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+    const voices = [{ f: 4300, rate: 34, period: 1.1, len: 0.55, off: 0 }, { f: 3900, rate: 28, period: 1.32, len: 0.45, off: 0.6 }];
+    for (let i = 0; i < len; i++) {
+      const t = i / sr; let v = 0;
+      for (const c of voices) {
+        const tp = (t + c.off) % c.period;
+        if (tp < c.len) { const e = Math.sin(Math.PI * tp / c.len), pulse = Math.max(0, Math.sin(2 * Math.PI * c.rate * tp)); v += Math.sin(2 * Math.PI * c.f * t) * pulse * pulse * e * 0.5; }
+      }
+      d[i] = v;
+    }
+    return buf;
+  }
   let scaleRoot = 220; // A3
   const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19];
   let moodChord = [0, 7, 12, 16]; // intervals in semitones
@@ -66,6 +79,12 @@
     const lfo2 = ctx.createOscillator(); lfo2.frequency.value = 0.07;
     const lfo2G = ctx.createGain(); lfo2G.gain.value = 220; lfo2.connect(lfo2G); lfo2G.connect(wind.f.frequency); lfo2.start();
 
+    // crickets: two voices chirping on their own periods, faded in on warm nights
+    const cr = ctx.createBufferSource(); cr.buffer = cricketBuffer(6.6); cr.loop = true;
+    const crHp = ctx.createBiquadFilter(); crHp.type = 'highpass'; crHp.frequency.value = 2500;
+    cricketGain = ctx.createGain(); cricketGain.gain.value = 0;
+    cr.connect(crHp); crHp.connect(cricketGain); cricketGain.connect(worldBus); cr.start();
+
     // pads
     padFilter = ctx.createBiquadFilter(); padFilter.type = 'lowpass'; padFilter.frequency.value = 900; padFilter.Q.value = 0.7;
     padFilter.connect(musicBus);
@@ -117,6 +136,10 @@
     A.setChord(m.chord, 4);
   };
 
+  A.setNight = function (o) { // {crickets: 0..1}
+    if (!ctx) return;
+    cricketGain.gain.setTargetAtTime(0.045 * Math.max(0, Math.min(1, o.crickets || 0)), ctx.currentTime, 3);
+  };
   A.setMood = function (mood) {
     if (!ctx) return;
     scaleRoot = mood === 'night' ? 164.8 : mood === 'dusk' ? 196 : 220;
@@ -207,6 +230,16 @@
         const g = ctx.createGain(); const t0 = t + i * 0.045; env(g, t0, 0.005, 0.03, 0.06);
         s.connect(g); g.connect(pn); s.start(t0);
       }
+    },
+    owl(p) { // two soft hoots
+      const pn = panner(p.pan); pn.connect(worldBus);
+      [[0, 0.35], [0.55, 0.5]].forEach(([d, len]) => {
+        const t = ctx.currentTime + d, o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+        o.type = 'sine'; o.frequency.setValueAtTime(392, t); o.frequency.exponentialRampToValueAtTime(330, t + len);
+        lp.type = 'lowpass'; lp.frequency.value = 900;
+        env(g, t, 0.07, len, 0.16);
+        o.connect(lp); lp.connect(g); g.connect(pn); o.start(t); o.stop(t + len + 0.15);
+      });
     },
     thunder(p) {
       const t = ctx.currentTime, s = ctx.createBufferSource(); s.buffer = noiseBuffer(3, 'brown');

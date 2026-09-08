@@ -210,6 +210,78 @@
     rainPos.set([x, y, z, x + 0.03, y + l, z + 0.02], i * 6);
   }
 
+  /* ---------- the night sky: stars, a moon with a phase, fireflies ---------- */
+  let stars, moon, moonTex, moonPhase = -1, fireflies, ffBase, ffPhase, ffColor, ffAmount = 0, nightAmount = 0;
+  function makeSky() {
+    const N = 420, pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const az = Math.random() * Math.PI * 2, el = 0.06 + Math.pow(Math.random(), 1.4) * 1.4, r = 70;
+      pos.set([r * Math.cos(el) * Math.cos(az), r * Math.sin(el), r * Math.cos(el) * Math.sin(az)], i * 3);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    stars = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xe6ecff, size: 0.55, sizeAttenuation: true, transparent: true, opacity: 0, fog: false, toneMapped: false, depthWrite: false }));
+    stars.frustumCulled = false; scene.add(stars);
+    moonTex = new THREE.CanvasTexture(document.createElement('canvas'));
+    moonTex.magFilter = THREE.NearestFilter; moonTex.minFilter = THREE.NearestFilter; moonTex.generateMipmaps = false;
+    moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, transparent: true, opacity: 0, fog: false, toneMapped: false, depthWrite: false }));
+    const az = 2.3, el = 0.24, r = 62;
+    moon.position.set(r * Math.cos(el) * Math.cos(az), r * Math.sin(el), r * Math.cos(el) * Math.sin(az));
+    moon.scale.set(6, 6, 1);
+    scene.add(moon);
+    drawMoon(0.5);
+    // fireflies
+    const F = 80; ffBase = new Float32Array(F * 3); ffPhase = new Float32Array(F);
+    const fp = new Float32Array(F * 3); ffColor = new Float32Array(F * 3);
+    for (let i = 0; i < F; i++) {
+      const rr = Math.sqrt(Math.random()) * R * 0.85, a = Math.random() * Math.PI * 2;
+      ffBase.set([Math.cos(a) * rr, rnd(0.6, 1.7), Math.sin(a) * rr], i * 3);
+      ffPhase[i] = Math.random() * 20;
+    }
+    const fg = new THREE.BufferGeometry();
+    fg.setAttribute('position', new THREE.BufferAttribute(fp, 3));
+    fg.setAttribute('color', new THREE.BufferAttribute(ffColor, 3));
+    fireflies = new THREE.Points(fg, new THREE.PointsMaterial({ size: 0.3, sizeAttenuation: true, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false }));
+    fireflies.frustumCulled = false; fireflies.visible = false; scene.add(fireflies);
+  }
+  // a 16×16 pixel moon: the lit side follows the phase (waxing lights the right edge)
+  function drawMoon(phase) {
+    const cv = moonTex.image; cv.width = 16; cv.height = 16;
+    const g = cv.getContext('2d'); g.clearRect(0, 0, 16, 16);
+    const k = (1 - Math.cos(2 * Math.PI * phase)) / 2, side = phase < 0.5 ? 1 : -1;
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const nx = (x - 7.5) / 7, ny = (y - 7.5) / 7, d = nx * nx + ny * ny;
+      if (d > 1) continue;
+      const w = Math.sqrt(1 - ny * ny);
+      const lit = side * nx >= -(2 * k - 1) * w;
+      g.fillStyle = lit ? (d > 0.8 ? '#d8d4bf' : '#f2eed8') : 'rgba(60,68,92,0.35)';
+      g.fillRect(x, y, 1, 1);
+    }
+    moonTex.needsUpdate = true; moonPhase = phase;
+  }
+  // o: {night 0..1, moonPhase 0..1, fireflies 0..1}
+  W.setNight = function (o) {
+    nightAmount = Math.max(0, Math.min(1, o.night || 0));
+    if (o.moonPhase != null && Math.abs(o.moonPhase - moonPhase) > 0.01) drawMoon(o.moonPhase);
+    stars.material.opacity = nightAmount * 0.9;
+    moon.material.opacity = nightAmount;
+    ffAmount = Math.max(0, Math.min(1, o.fireflies || 0)) * nightAmount;
+    fireflies.visible = ffAmount > 0.02;
+  };
+  function animateFireflies(t) {
+    if (!fireflies.visible) return;
+    const p = fireflies.geometry.attributes.position.array, c = ffColor;
+    for (let i = 0; i < ffPhase.length; i++) {
+      const k = i * 3, ph = ffPhase[i];
+      p[k] = ffBase[k] + Math.sin(t * 0.3 + ph) * 0.7;
+      p[k + 1] = ffBase[k + 1] + Math.sin(t * 0.7 + ph * 1.7) * 0.15;
+      p[k + 2] = ffBase[k + 2] + Math.cos(t * 0.25 + ph * 1.3) * 0.7;
+      const b = Math.pow(Math.max(0, Math.sin(t * 1.4 + ph * 2.1)), 10) * ffAmount;
+      c[k] = 1.0 * b; c[k + 1] = 0.93 * b; c[k + 2] = 0.35 * b;
+    }
+    fireflies.geometry.attributes.position.needsUpdate = true;
+    fireflies.geometry.attributes.color.needsUpdate = true;
+  }
+
   /* ---------- creatures: pixel sprites ---------- */
   // Each species has three frames of the same size: two walk frames and a sleeping pose.
   const K = '#14121c';
@@ -428,6 +500,7 @@
     scene.add(makeSnag(-5.4, 2.6, 0.9, true));
     scene.add(makeSnag(3.6, -4.6, 0.8, true));
     scene.add(makeRain(2200));
+    makeSky();
     setupPost();
 
     window.addEventListener('resize', onResize);
@@ -472,13 +545,15 @@
     lightCol.lerp(tmpC.setRGB(1, 0.62, 0.32), Math.min(1, dusk) * 0.7);
     if (a.mood === 'dusk') lightCol.lerp(tmpC.setRGB(1, 0.55, 0.25), 0.6);
     if (a.mood === 'night') lightCol.lerp(tmpC.setRGB(0.4, 0.5, 1), 0.7);
-    const bright = (0.45 + 1.2 * day) * (a.mood === 'night' ? 0.55 : 1) * (1 - a.rainAmount * 0.35) * (a.brightness || 1);
+    // moonlight: a cool fill on clear nights, scaled by how much of the moon is lit
+    const moonlight = (1 - day) * (a.moon || 0) * (1 - a.rainAmount) * (a.fog ? 0.3 : 1);
+    const bright = (0.45 + 1.2 * day + 0.25 * moonlight) * (a.mood === 'night' ? 0.55 : 1) * (1 - a.rainAmount * 0.35) * (a.brightness || 1);
     spot.color.copy(lightCol); spot.intensity = bright * 1.6;
-    hemi.intensity = 0.15 + 0.3 * day;
+    hemi.intensity = 0.15 + 0.3 * day + 0.12 * moonlight;
     grassMat.uniforms.uLight.value.copy(lightCol);
     grassMat.uniforms.uAmb.value = 0.14 + 0.34 * bright;
     grassMat.uniforms.uWind.value = 0.35 + a.wind * 1.6;
-    fillLight.intensity = a.mood === 'night' ? 0.4 : 0.15;
+    fillLight.intensity = (a.mood === 'night' ? 0.4 : 0.15) + 0.5 * moonlight;
     rainCount = Math.floor(2200 * a.rainAmount);
     rain.geometry.setDrawRange(0, rainCount);
     rain.material.opacity = 0.22 + 0.25 * a.rainAmount;
@@ -492,6 +567,7 @@
     const t = clock.elapsedTime;
     grassMat.uniforms.uTime.value = t;
     applyFlowers(dt);
+    animateFireflies(t);
     // rain
     if (rainCount > 0) {
       const fall = (snowMode ? 1.6 : 9) * dt, drift = snowMode ? Math.sin(t * 0.7) * 0.5 * dt : dt * 0.6;

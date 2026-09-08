@@ -24,6 +24,12 @@ python -m http.server 8765
 
 Then open http://localhost:8765 and click to enter (audio needs a user gesture).
 
+## Day, night and the year
+
+- Creatures are animated: a two-frame walk (faster when fleeing, a slow shuffle while busy) and a curled sleeping pose after a moment at rest.
+- Seasons follow the calendar at the place (flipped south of the equator): the grass goes to straw in autumn and winter, a warm spell greens it up, and a snow cover builds while it snows, holds in the cold and melts above freezing. Snow persists between visits.
+- At night the sky fills with stars and a moon drawn at its real phase (tilt the camera toward the horizon to see them), moonlight brightens clear nights, fireflies drift over the grass when it is warm and dry, crickets fade in and an owl calls from beyond the ravine.
+
 ## The plot remembers
 
 - Every creature is an individual with a name, an age and a lifespan. Young ones are small, old ones slow.
